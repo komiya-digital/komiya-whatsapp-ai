@@ -9,7 +9,8 @@
     "dev:server": "node --watch src/index.js",
     "dev:client": "vite",
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "render-start": "npm run build && npm start"
   },
   "dependencies": {
     "@google/genai": "2.23.0",
