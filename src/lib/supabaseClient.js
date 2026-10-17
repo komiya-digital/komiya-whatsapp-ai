@@ -1,189 +1,852 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder_key';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-/**
- * Initial Mock Application State
- */
-export const initialMockState = {
-  user: {
-    id: 'usr_101',
-    email: 'contact@komiyadigital.ci',
-    fullName: 'Komiya Digital',
-    role: 'owner'
-  },
-  business: {
-    id: 'bus_101',
-    name: 'Komiya Commerce',
-    description: 'Vente de vêtements et formations e-commerce en Côte d\'Ivoire',
-    country: 'Côte d\'Ivoire',
-    currency: 'FCFA'
-  },
-  whatsapp: {
-    sessionId: '121080',
-    phoneNumber: '+2250586896826',
-    apiKey: '8610|X0eFv8TP6STJGMuJIxdNVkofYIFnq6XbWzmfbhlI93d19213',
-    isConnected: true,
-    status: 'connected',
-    lastSyncAt: new Date().toISOString()
-  },
-  aiAgent: {
-    name: 'Awa',
-    companyDescription: 'Komiya Commerce - Boutique spécialisée en mode et formations marketing à Abidjan.',
-    productsSummary: 'Formations e-commerce, prêt-à-porter africain, coaching WhatsApp Marketing.',
-    idealClient: 'Entrepreneurs, étudiants et professionnels d\'Afrique de l\'Ouest.',
-    country: 'Côte d\'Ivoire',
-    tone: 'Professionnel',
-    objective: 'Vendre + qualifier',
-    customInstructions: 'Pose une question à la fois. Reste toujours poli. Demande le nom, budget et besoin avant de marquer comme qualifié.',
-    isActive: true
-  },
-  products: [
-    {
-      id: 'prod_1',
-      name: 'Formation Facebook & WhatsApp Ads',
-      description: 'Formation pratique complète pour acquérir 50 prospects par jour sur WhatsApp.',
-      price: 50000,
-      currency: 'FCFA',
-      category: 'Formation',
-      isAvailable: true,
-      salesArguments: ['Accessible aux débutants', 'Accompagnement 30 jours', 'Exercices pratiques'],
-      imageUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=500&auto=format&fit=crop&q=60',
-      faqs: [
-        { question: 'Est-ce adapté si je débute ?', answer: 'Oui, la formation commence par les bases zéro.' },
-        { question: 'Combien de temps dure l\'accès ?', answer: 'Accès à vie avec mises à jour gratuites.' }
-      ]
-    },
-    {
-      id: 'prod_2',
-      name: 'Pack Prêt-à-porter Élégance Abidjan',
-      description: 'Ensemble en tissu pagne moderne d\'inspiration africaine.',
-      price: 35000,
-      currency: 'FCFA',
-      category: 'Mode & Style',
-      isAvailable: true,
-      salesArguments: ['Tissu 100% coton', 'Livraison express à Abidjan', 'Finitions haut de gamme'],
-      imageUrl: 'https://images.unsplash.com/photo-1590736704728-f4730bb30770?w=500&auto=format&fit=crop&q=60',
-      faqs: [
-        { question: 'Quelles sont les tailles disponibles ?', answer: 'Tailles du S au XXL disponibles.' }
-      ]
-    }
-  ],
-  contacts: [
-    {
-      id: 'ct_1',
-      name: 'Jean-Yves Kouassi',
-      whatsappNumber: '+2250701020304',
-      source: 'WhatsApp Webhook',
-      need: 'Souhaite former son équipe commerciale à WhatsApp Ads',
-      budget: '100 000 FCFA',
-      location: 'Abidjan, Cocody',
-      status: 'Qualifié',
-      score: 85,
-      lastMessage: 'Je suis très intéressé par la formation 50k FCFA. Comment s\'inscrire ?',
-      lastInteractionAt: new Date(Date.now() - 1000 * 60 * 15).toISOString()
-    },
-    {
-      id: 'ct_2',
-      name: 'Amina Diop',
-      whatsappNumber: '+221771234567',
-      source: 'WhatsApp Webhook',
-      need: 'Informations sur la livraison au Sénégal',
-      budget: '35 000 FCFA',
-      location: 'Dakar',
-      status: 'En conversation',
-      score: 60,
-      lastMessage: 'Est-ce que vous livrez aussi à Dakar ?',
-      lastInteractionAt: new Date(Date.now() - 1000 * 60 * 45).toISOString()
-    },
-    {
-      id: 'ct_3',
-      name: 'Marc-Aurèle Yao',
-      whatsappNumber: '+2250102030405',
-      source: 'WhatsApp Webhook',
-      need: 'Demande de réduction sur la formation',
-      budget: 'Non identifié',
-      location: 'Yopougon',
-      status: 'À relancer',
-      score: 40,
-      lastMessage: 'Pouvez-vous me faire un prix à 30 000 FCFA ?',
-      lastInteractionAt: new Date(Date.now() - 1000 * 60 * 360).toISOString()
-    }
-  ],
-  conversations: [
-    {
-      id: 'conv_1',
-      contactId: 'ct_1',
-      contactName: 'Jean-Yves Kouassi',
-      whatsappNumber: '+2250701020304',
-      isAiActive: true,
-      unreadCount: 0,
-      status: 'active',
-      messages: [
-        { id: 'm1', direction: 'inbound', senderType: 'user', content: 'Bonjour, vous proposez des formations WhatsApp ?', timestamp: '10:15' },
-        { id: 'm2', direction: 'outbound', senderType: 'ai', content: 'Bonjour Jean-Yves ! 👋 Oui tout à fait. Notre formation Formation Facebook & WhatsApp Ads est idéale pour obtenir 50 prospects par jour. Quel est votre domaine d\'activité ?', timestamp: '10:16' },
-        { id: 'm3', direction: 'inbound', senderType: 'user', content: 'Je suis gérant d\'une boutique de cosmétiques à Cocody. Je cherche à former mes vendeurs.', timestamp: '10:18' },
-        { id: 'm4', direction: 'outbound', senderType: 'ai', content: 'Super ! La formation coûte 50 000 FCFA et inclut 30 jours d\'accompagnement pratique. Quel est votre budget pour cette formation ?', timestamp: '10:19' },
-        { id: 'm5', direction: 'inbound', senderType: 'user', content: 'Je suis très intéressé par la formation 50k FCFA. Comment s\'inscrire ?', timestamp: '10:20' }
-      ]
-    },
-    {
-      id: 'conv_2',
-      contactId: 'ct_2',
-      contactName: 'Amina Diop',
-      whatsappNumber: '+221771234567',
-      isAiActive: true,
-      unreadCount: 1,
-      status: 'active',
-      messages: [
-        { id: 'm10', direction: 'inbound', senderType: 'user', content: 'Bonjour ! Vos tenues prêt-à-porter sont disponibles ?', timestamp: '09:30' },
-        { id: 'm11', direction: 'outbound', senderType: 'ai', content: 'Bonjour Amina ! 😊 Oui, le Pack Prêt-à-porter Élégance Abidjan est disponible au prix de 35 000 FCFA. Où êtes-vous située ?', timestamp: '09:31' },
-        { id: 'm12', direction: 'inbound', senderType: 'user', content: 'Est-ce que vous livrez aussi à Dakar ?', timestamp: '09:45' }
-      ]
-    }
-  ],
-  automations: [
-    { id: 'auto_1', name: 'Réponse instantanée IA', triggerType: 'instant_reply', isEnabled: true, description: 'L\'IA répond en moins de 10 secondes aux nouveaux messages entrants.' },
-    { id: 'auto_2', name: 'Qualification automatique', triggerType: 'qualification', isEnabled: true, description: 'Extrait le besoin, le budget et le produit d\'intérêt pendant l\'échange.' },
-    { id: 'auto_3', name: 'Relance après 6h', triggerType: 'follow_up', isEnabled: true, description: 'Envoie un message de relance personnalisé si le prospect ne répond plus.' },
-    { id: 'auto_4', name: 'Passage de main humain', triggerType: 'human_handover', isEnabled: true, description: 'Désactive l\'IA et alerte le propriétaire si un humain est demandé.' }
-  ]
-};
-
-export function getLocalStore() {
-  if (typeof window === 'undefined') return initialMockState;
-  const saved = localStorage.getItem('komiya_app_state');
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      return {
-        ...initialMockState,
-        ...parsed,
-        user: { ...initialMockState.user, ...(parsed.user || {}) },
-        business: { ...initialMockState.business, ...(parsed.business || {}) },
-        whatsapp: { ...initialMockState.whatsapp, ...(parsed.whatsapp || {}) },
-        aiAgent: { ...initialMockState.aiAgent, ...(parsed.aiAgent || {}) },
-        products: Array.isArray(parsed.products) && parsed.products.length > 0 ? parsed.products : initialMockState.products,
-        contacts: Array.isArray(parsed.contacts) && parsed.contacts.length > 0 ? parsed.contacts : initialMockState.contacts,
-        conversations: Array.isArray(parsed.conversations) && parsed.conversations.length > 0 ? parsed.conversations : initialMockState.conversations,
-        automations: Array.isArray(parsed.automations) && parsed.automations.length > 0 ? parsed.automations : initialMockState.automations,
-      };
-    } catch (e) {
-      console.error('Failed to parse local state:', e);
-    }
-  }
-  localStorage.setItem('komiya_app_state', JSON.stringify(initialMockState));
-  return initialMockState;
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('⚠️ Supabase credentials missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env');
 }
 
-export function saveLocalStore(state) {
-  if (typeof window === 'undefined') return;
+export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'placeholder', {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
+
+// ─── PROFILE HELPERS ──────────────────────────────────────────────
+
+export async function getProfile(userId) {
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data || null;
+}
+
+export async function upsertProfile(userId, updates) {
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({ id: userId, ...updates, updated_at: new Date().toISOString() })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─── BUSINESS HELPERS ─────────────────────────────────────────────
+
+export async function getBusiness(ownerId) {
   try {
-    localStorage.setItem('komiya_app_state', JSON.stringify(state));
+    if (!ownerId) return null;
+    const { data, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error && error.code !== 'PGRST116') throw error;
+    return data || null;
   } catch (e) {
-    console.error('Failed to save local store:', e);
+    console.warn('getBusiness note:', e);
+    return null;
   }
 }
+
+export async function createBusiness(ownerId, businessData) {
+  const { data, error } = await supabase
+    .from('businesses')
+    .insert({
+      owner_id: ownerId,
+      name: businessData.name || 'Mon Entreprise',
+      description: businessData.description || '',
+      country: businessData.country || 'Côte d\'Ivoire',
+      currency: businessData.currency || 'FCFA',
+      onboarding_completed: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateBusiness(businessId, updates) {
+  if (!businessId) return null;
+  const { data, error } = await supabase
+    .from('businesses')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', businessId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─── PRODUCTS HELPERS ─────────────────────────────────────────────
+
+export async function getProducts(businessId) {
+  if (!businessId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        faqs:product_faqs(id, question, answer)
+      `)
+      .eq('business_id', businessId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('getProducts error:', error.message);
+      return [];
+    }
+
+    return (data || []).map(p => ({
+      id: p.id,
+      businessId: p.business_id,
+      name: p.name,
+      description: p.description,
+      price: Number(p.price) || 0,
+      currency: p.currency || 'FCFA',
+      category: p.category || 'Général',
+      isAvailable: p.is_available ?? true,
+      salesArguments: p.sales_arguments || [],
+      imageUrl: p.image_url || '',
+      faqs: p.faqs || [],
+      createdAt: p.created_at
+    }));
+  } catch (err) {
+    console.error('getProducts error:', err);
+    return [];
+  }
+}
+
+export async function createProduct(businessId, product) {
+  const { data, error } = await supabase
+    .from('products')
+    .insert({
+      business_id: businessId,
+      name: product.name,
+      description: product.description,
+      price: Number(product.price) || 0,
+      currency: product.currency || 'FCFA',
+      category: product.category || 'Général',
+      is_available: product.isAvailable ?? true,
+      sales_arguments: product.salesArguments || [],
+      image_url: product.imageUrl || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  // Insert FAQs if any
+  if (product.faqs && product.faqs.length > 0) {
+    const faqRows = product.faqs.map(f => ({
+      product_id: data.id,
+      question: f.question,
+      answer: f.answer,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+    await supabase.from('product_faqs').insert(faqRows);
+  }
+
+  return {
+    ...data,
+    businessId: data.business_id,
+    isAvailable: data.is_available,
+    salesArguments: data.sales_arguments,
+    imageUrl: data.image_url,
+    faqs: product.faqs || []
+  };
+}
+
+export async function updateProduct(productId, updates) {
+  const payload = { updated_at: new Date().toISOString() };
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.price !== undefined) payload.price = Number(updates.price);
+  if (updates.currency !== undefined) payload.currency = updates.currency;
+  if (updates.category !== undefined) payload.category = updates.category;
+  if (updates.isAvailable !== undefined) payload.is_available = updates.isAvailable;
+  if (updates.salesArguments !== undefined) payload.sales_arguments = updates.salesArguments;
+  if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
+
+  const { data, error } = await supabase
+    .from('products')
+    .update(payload)
+    .eq('id', productId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteProduct(productId) {
+  const { error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', productId);
+  if (error) throw error;
+}
+
+// ─── CONTACTS HELPERS ─────────────────────────────────────────────
+
+export async function getContacts(businessId) {
+  if (!businessId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('business_id', businessId)
+      .order('last_interaction_at', { ascending: false });
+
+    if (error) {
+      console.error('getContacts error:', error.message);
+      return [];
+    }
+
+    return (data || []).map(formatContact);
+  } catch (err) {
+    console.error('getContacts error:', err);
+    return [];
+  }
+}
+
+function formatContact(c) {
+  return {
+    id: c.id,
+    businessId: c.business_id,
+    name: c.name || 'Prospect WhatsApp',
+    whatsappNumber: c.whatsapp_number,
+    source: c.source || 'WhatsApp Webhook',
+    need: c.need || '',
+    budget: c.budget || '',
+    location: c.location || '',
+    status: c.status || 'Nouveau',
+    score: c.score ?? 0,
+    lastMessage: c.last_message || '',
+    lastInteractionAt: c.last_interaction_at,
+    createdAt: c.created_at
+  };
+}
+
+export async function updateContactStatus(contactId, status, score) {
+  const updates = { status, updated_at: new Date().toISOString() };
+  if (score !== undefined) updates.score = score;
+  const { data, error } = await supabase
+    .from('contacts')
+    .update(updates)
+    .eq('id', contactId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─── CONVERSATIONS HELPERS ────────────────────────────────────────
+
+export async function getConversations(businessId) {
+  if (!businessId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select(`
+        *,
+        contact:contacts(id, name, whatsapp_number, status, score, need, budget, location)
+      `)
+      .eq('business_id', businessId)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('getConversations error:', error.message);
+      return [];
+    }
+
+    return (data || []).map(formatConv);
+  } catch (err) {
+    console.error('getConversations error:', err);
+    return [];
+  }
+}
+
+function formatConv(conv) {
+  return {
+    id: conv.id,
+    businessId: conv.business_id,
+    contactId: conv.contact_id,
+    contactName: conv.contact?.name || 'Prospect WhatsApp',
+    whatsappNumber: conv.contact?.whatsapp_number || '',
+    isAiActive: conv.is_ai_active ?? true,
+    unreadCount: conv.unread_count || 0,
+    status: conv.status || 'active',
+    updatedAt: conv.updated_at,
+    contact: conv.contact ? {
+      id: conv.contact.id,
+      name: conv.contact.name,
+      whatsappNumber: conv.contact.whatsapp_number,
+      status: conv.contact.status,
+      score: conv.contact.score,
+      need: conv.contact.need,
+      budget: conv.contact.budget,
+      location: conv.contact.location
+    } : null
+  };
+}
+
+export async function getMessages(conversationId) {
+  if (!conversationId) return [];
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(m => ({
+    id: m.id,
+    conversationId: m.conversation_id,
+    direction: m.direction,
+    senderType: m.sender_type,
+    content: m.content,
+    timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    createdAt: m.created_at
+  }));
+}
+
+export async function createMessage(conversationId, message) {
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({
+      conversation_id: conversationId,
+      direction: message.direction || 'outbound',
+      sender_type: message.senderType || 'human',
+      content: message.content,
+      created_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  // Touch conversation updated_at
+  await supabase
+    .from('conversations')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', conversationId);
+
+  return {
+    id: data.id,
+    conversationId: data.conversation_id,
+    direction: data.direction,
+    senderType: data.sender_type,
+    content: data.content,
+    timestamp: new Date(data.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  };
+}
+
+export async function toggleConversationAI(conversationId, isAiActive) {
+  const { data, error } = await supabase
+    .from('conversations')
+    .update({ is_ai_active: isAiActive, updated_at: new Date().toISOString() })
+    .eq('id', conversationId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─── CONVERSATION NOTES & TAGS ────────────────────────────────────
+
+export async function getConversationNotes(conversationId) {
+  if (!conversationId) return [];
+  const { data, error } = await supabase
+    .from('conversation_notes')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true });
+  if (error) return [];
+  return (data || []).map(n => n.content);
+}
+
+export async function addConversationNote(conversationId, authorId, content) {
+  const { data, error } = await supabase
+    .from('conversation_notes')
+    .insert({
+      conversation_id: conversationId,
+      author_id: authorId,
+      content,
+      created_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getTags(businessId) {
+  if (!businessId) return [];
+  const { data, error } = await supabase
+    .from('tags')
+    .select('*')
+    .eq('business_id', businessId);
+  if (error) return [];
+  return data || [];
+}
+
+export async function createTag(businessId, name, color = '#00C896') {
+  const { data, error } = await supabase
+    .from('tags')
+    .insert({ business_id: businessId, name, color })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─── AI AGENT HELPERS ─────────────────────────────────────────────
+
+export async function getAiAgent(businessId) {
+  if (!businessId) return null;
+  const { data, error } = await supabase
+    .from('ai_agents')
+    .select('*')
+    .eq('business_id', businessId)
+    .maybeSingle();
+  if (error && error.code !== 'PGRST116') throw error;
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    businessId: data.business_id,
+    name: data.name || 'Awa',
+    companyDescription: data.company_description || '',
+    productsSummary: data.products_summary || '',
+    idealClient: data.ideal_client || '',
+    country: data.country || 'Côte d\'Ivoire',
+    tone: data.tone || 'Professionnel',
+    objective: data.objective || 'Vendre + qualifier',
+    customInstructions: data.custom_instructions || '',
+    isActive: data.is_active ?? true
+  };
+}
+
+export async function upsertAiAgent(businessId, agentData) {
+  const existing = await getAiAgent(businessId);
+  const payload = {
+    name: agentData.name || 'Awa',
+    company_description: agentData.companyDescription || agentData.company_description || '',
+    products_summary: agentData.productsSummary || agentData.products_summary || '',
+    ideal_client: agentData.idealClient || agentData.ideal_client || '',
+    country: agentData.country || 'Côte d\'Ivoire',
+    tone: agentData.tone || 'Professionnel',
+    objective: agentData.objective || 'Vendre + qualifier',
+    custom_instructions: agentData.customInstructions || agentData.custom_instructions || '',
+    is_active: agentData.isActive ?? agentData.is_active ?? true,
+    updated_at: new Date().toISOString()
+  };
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from('ai_agents')
+      .update(payload)
+      .eq('business_id', businessId)
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      ...data,
+      businessId: data.business_id,
+      companyDescription: data.company_description,
+      productsSummary: data.products_summary,
+      idealClient: data.ideal_client,
+      customInstructions: data.custom_instructions,
+      isActive: data.is_active
+    };
+  } else {
+    const { data, error } = await supabase
+      .from('ai_agents')
+      .insert({ ...payload, business_id: businessId, created_at: new Date().toISOString() })
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      ...data,
+      businessId: data.business_id,
+      companyDescription: data.company_description,
+      productsSummary: data.products_summary,
+      idealClient: data.ideal_client,
+      customInstructions: data.custom_instructions,
+      isActive: data.is_active
+    };
+  }
+}
+
+// ─── WHATSAPP HELPERS ─────────────────────────────────────────────
+
+export async function getWhatsAppConnection(businessId) {
+  if (!businessId) return null;
+  const { data, error } = await supabase
+    .from('whatsapp_connections')
+    .select('*')
+    .eq('business_id', businessId)
+    .maybeSingle();
+  if (error && error.code !== 'PGRST116') throw error;
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    businessId: data.business_id,
+    sessionId: data.session_id || '',
+    phoneNumber: data.phone_number || '',
+    apiKey: data.api_key || '',
+    status: data.status || 'disconnected',
+    isConnected: data.is_connected ?? false,
+    lastSyncAt: data.last_sync_at
+  };
+}
+
+export async function upsertWhatsAppConnection(businessId, connectionData) {
+  const existing = await getWhatsAppConnection(businessId);
+  const payload = {
+    session_id: connectionData.sessionId || connectionData.session_id || '',
+    phone_number: connectionData.phoneNumber || connectionData.phone_number || '',
+    api_key: connectionData.apiKey || connectionData.api_key || '',
+    status: connectionData.status || (connectionData.isConnected ? 'connected' : 'disconnected'),
+    is_connected: connectionData.isConnected ?? true,
+    last_sync_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from('whatsapp_connections')
+      .update(payload)
+      .eq('business_id', businessId)
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      ...data,
+      businessId: data.business_id,
+      sessionId: data.session_id,
+      phoneNumber: data.phone_number,
+      apiKey: data.api_key,
+      isConnected: data.is_connected
+    };
+  } else {
+    const { data, error } = await supabase
+      .from('whatsapp_connections')
+      .insert({ ...payload, business_id: businessId, created_at: new Date().toISOString() })
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      ...data,
+      businessId: data.business_id,
+      sessionId: data.session_id,
+      phoneNumber: data.phone_number,
+      apiKey: data.api_key,
+      isConnected: data.is_connected
+    };
+  }
+}
+
+// ─── AUTOMATIONS HELPERS ──────────────────────────────────────────
+
+export async function getAutomations(businessId) {
+  if (!businessId) return [];
+  const { data, error } = await supabase
+    .from('automations')
+    .select('*')
+    .eq('business_id', businessId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    return upsertDefaultAutomations(businessId);
+  }
+  return data.map(a => ({
+    id: a.id,
+    businessId: a.business_id,
+    name: a.name,
+    triggerType: a.trigger_type,
+    isEnabled: a.is_enabled ?? true,
+    settingsJson: a.settings_json || {},
+    description: a.settings_json?.description || ''
+  }));
+}
+
+export async function updateAutomation(automationId, isEnabled, settingsJson) {
+  const updates = { is_enabled: isEnabled, updated_at: new Date().toISOString() };
+  if (settingsJson) updates.settings_json = settingsJson;
+
+  const { data, error } = await supabase
+    .from('automations')
+    .update(updates)
+    .eq('id', automationId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertDefaultAutomations(businessId) {
+  if (!businessId) return [];
+  const defaults = [
+    {
+      business_id: businessId,
+      name: 'Réponse instantanée IA',
+      trigger_type: 'instant_reply',
+      is_enabled: true,
+      settings_json: { description: "L'IA répond en moins de 10 secondes aux nouveaux messages entrants." }
+    },
+    {
+      business_id: businessId,
+      name: 'Qualification automatique des leads',
+      trigger_type: 'qualification',
+      is_enabled: true,
+      settings_json: { description: "Extrait le besoin, le budget et le produit d'intérêt pendant l'échange." }
+    },
+    {
+      business_id: businessId,
+      name: 'Relance automatique des prospects inactifs',
+      trigger_type: 'follow_up',
+      is_enabled: true,
+      settings_json: { description: "Envoie un message de relance personnalisé si le prospect ne répond plus." }
+    },
+    {
+      business_id: businessId,
+      name: 'Passage de main humain (Alerte)',
+      trigger_type: 'human_handover',
+      is_enabled: true,
+      settings_json: { description: "Désactive l'IA et alerte le propriétaire si un humain est demandé." }
+    }
+  ];
+
+  const { data, error } = await supabase
+    .from('automations')
+    .upsert(defaults, { onConflict: 'business_id,trigger_type' })
+    .select();
+  if (error) {
+    // If table doesn't have unique constraint, fallback to insert
+    const insertRes = await supabase.from('automations').insert(defaults).select();
+    if (!insertRes.error && insertRes.data) {
+      return insertRes.data.map(a => ({
+        id: a.id,
+        businessId: a.business_id,
+        name: a.name,
+        triggerType: a.trigger_type,
+        isEnabled: a.is_enabled ?? true,
+        settingsJson: a.settings_json || {},
+        description: a.settings_json?.description || ''
+      }));
+    }
+  }
+  return (data || []).map(a => ({
+    id: a.id,
+    businessId: a.business_id,
+    name: a.name,
+    triggerType: a.trigger_type,
+    isEnabled: a.is_enabled ?? true,
+    settingsJson: a.settings_json || {},
+    description: a.settings_json?.description || ''
+  }));
+}
+
+// ─── ANALYTICS & DASHBOARD HELPERS ────────────────────────────────
+
+export async function getDashboardStats(businessId) {
+  if (!businessId) {
+    return {
+      conversationsCount: 0,
+      todayConversationsCount: 0,
+      qualifiedContactsCount: 0,
+      followUpContactsCount: 0,
+      clientsCount: 0,
+      totalMessagesCount: 0,
+      totalProductsCount: 0,
+      qualificationRate: '0%',
+      recentActivity: []
+    };
+  }
+
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayIso = todayStart.toISOString();
+
+    const [
+      convAll,
+      convToday,
+      contactsAll,
+      contactsQualified,
+      contactsFollowUp,
+      contactsClient,
+      productsAll,
+      recentContacts
+    ] = await Promise.all([
+      supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
+      supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', todayIso),
+      supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('business_id', businessId),
+      supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Qualifié'),
+      supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'À relancer'),
+      supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Client'),
+      supabase.from('products').select('id, price', { count: 'exact' }).eq('business_id', businessId),
+      supabase.from('contacts').select('*').eq('business_id', businessId).order('last_interaction_at', { ascending: false }).limit(6)
+    ]);
+
+    // Real messages count strictly for this business
+    let totalMessages = 0;
+    try {
+      const { data: convRows } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('business_id', businessId);
+      if (convRows && convRows.length > 0) {
+        const ids = convRows.map(c => c.id);
+        const { count } = await supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .in('conversation_id', ids);
+        totalMessages = count || 0;
+      }
+    } catch (e) {
+      console.warn('messages count query note:', e);
+    }
+
+    const totalContacts = contactsAll?.count || 0;
+    const totalQualified = contactsQualified?.count || 0;
+    const qualRate = totalContacts > 0 ? Math.round((totalQualified / totalContacts) * 100) : 0;
+
+    const clientsCount = contactsClient?.count || 0;
+    const productsList = productsAll?.data || [];
+    const avgPrice = productsList.length > 0 
+      ? Math.round(productsList.reduce((acc, p) => acc + (Number(p.price) || 0), 0) / productsList.length)
+      : 0;
+    const estimatedRevenue = clientsCount * avgPrice;
+
+    // Build real recent activity list from contacts in Supabase
+    const recentActivity = [];
+    if (recentContacts?.data && recentContacts.data.length > 0) {
+      for (const c of recentContacts.data) {
+        recentActivity.push({
+          id: c.id,
+          type: c.status === 'Qualifié' ? 'qualification' : (c.status === 'À relancer' ? 'alert' : 'lead'),
+          title: c.status === 'Qualifié' ? 'Qualification réussie' : (c.status === 'À relancer' ? 'Intervention requise' : 'Nouveau prospect'),
+          contactName: c.name || 'Prospect WhatsApp',
+          phone: c.whatsapp_number,
+          detail: c.need ? `Intérêt: ${c.need}` : (c.budget ? `Budget: ${c.budget}` : 'Échange WhatsApp actif'),
+          score: c.score ?? (c.status === 'Qualifié' ? 80 : 50),
+          status: c.status || 'Nouveau',
+          time: new Date(c.last_interaction_at || c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          dateIso: c.last_interaction_at || c.created_at
+        });
+      }
+    }
+
+    return {
+      conversationsCount: convAll?.count || 0,
+      todayConversationsCount: convToday?.count || 0,
+      qualifiedContactsCount: totalQualified,
+      followUpContactsCount: contactsFollowUp?.count || 0,
+      clientsCount,
+      estimatedRevenue,
+      averageCart: avgPrice,
+      totalMessagesCount: totalMessages,
+      totalProductsCount: productsAll?.count || productsList.length,
+      qualificationRate: `${qualRate}%`,
+      recentActivity
+    };
+  } catch (err) {
+    console.error('getDashboardStats failed:', err);
+    return {
+      conversationsCount: 0,
+      todayConversationsCount: 0,
+      qualifiedContactsCount: 0,
+      followUpContactsCount: 0,
+      clientsCount: 0,
+      estimatedRevenue: 0,
+      averageCart: 0,
+      totalMessagesCount: 0,
+      totalProductsCount: 0,
+      qualificationRate: '0%',
+      recentActivity: []
+    };
+  }
+}
+
+export async function getAnalyticsStats(businessId, period = '7d') {
+  if (!businessId) {
+    return {
+      conversations: 0,
+      contacts: 0,
+      messages: 0,
+      qualified: 0,
+      clients: 0,
+      conversionRate: '0%',
+      qualificationRate: '0%'
+    };
+  }
+
+  const now = new Date();
+  let since;
+  if (period === 'today') {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    since = todayStart.toISOString();
+  } else if (period === '7d') {
+    since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  } else {
+    since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  const [convResult, contactResult, qualifiedResult, clientResult] = await Promise.all([
+    supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', since),
+    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('business_id', businessId).gte('created_at', since),
+    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Qualifié').gte('created_at', since),
+    supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'Client').gte('created_at', since),
+  ]);
+
+  let msgCount = 0;
+  try {
+    const { data: convRows } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('business_id', businessId);
+    if (convRows && convRows.length > 0) {
+      const ids = convRows.map(c => c.id);
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .in('conversation_id', ids)
+        .gte('created_at', since);
+      msgCount = count || 0;
+    }
+  } catch (e) {
+    console.warn('analytics messages count note:', e);
+  }
+
+  const convCount = convResult.count || 0;
+  const contCount = contactResult.count || 0;
+  const qualCount = qualifiedResult.count || 0;
+  const clientCount = clientResult.count || 0;
+
+  return {
+    conversations: convCount,
+    contacts: contCount,
+    messages: msgCount,
+    qualified: qualCount,
+    clients: clientCount,
+    qualificationRate: contCount > 0 ? `${Math.round((qualCount / contCount) * 100)}%` : '0%',
+    conversionRate: contCount > 0 ? `${Math.round((clientCount / contCount) * 100)}%` : '0%'
+  };
+}
+

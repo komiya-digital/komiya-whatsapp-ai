@@ -36,12 +36,11 @@ class ErrorBoundary extends React.Component {
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  localStorage.removeItem('komiya_app_state');
                   window.location.reload();
                 }}
                 className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl"
               >
-                Réinitialiser & Recharger
+                Recharger la page
               </button>
             </div>
           </div>

@@ -1,27 +1,131 @@
-import React, { useState } from 'react';
-import { Sparkles, Mail, Lock, User, Building, ArrowRight, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, Mail, Lock, User, Building, ArrowRight, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
 
-export default function Auth({ onLoginSuccess }) {
-  const [mode, setMode] = useState('login'); // 'login', 'register', 'forgot'
-  const [email, setEmail] = useState('contact@komiyadigital.ci');
-  const [password, setPassword] = useState('password123');
-  const [fullName, setFullName] = useState('Komiya Digital');
-  const [companyName, setCompanyName] = useState('Komiya Commerce');
-  const [isSubmitted, setIsSubmitted] = useState(false);
+export default function Auth({ initialMode = 'login', onNavigate }) {
+  const { signIn, signUp, forgotPassword, resetPassword } = useAuth();
+
+  const [mode, setMode] = useState(initialMode); // 'login', 'register', 'forgot', 'reset'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setLoading(true);
+  useEffect(() => {
+    setMode(initialMode);
+    setErrorMessage('');
+    setSuccessMessage('');
+  }, [initialMode]);
 
-    setTimeout(() => {
-      setLoading(false);
-      if (mode === 'forgot') {
-        setIsSubmitted(true);
-      } else {
-        onLoginSuccess();
+  const switchMode = (newMode) => {
+    setMode(newMode);
+    setErrorMessage('');
+    setSuccessMessage('');
+    if (onNavigate) {
+      if (newMode === 'login') onNavigate('login');
+      else if (newMode === 'register') onNavigate('register');
+      else if (newMode === 'forgot') onNavigate('forgot-password');
+      else if (newMode === 'reset') onNavigate('reset-password');
+    }
+  };
+
+  const validate = () => {
+    setErrorMessage('');
+
+    if (mode === 'login') {
+      if (!email.trim() || !password) {
+        setErrorMessage('Veuillez renseigner votre email et mot de passe.');
+        return false;
       }
-    }, 600);
+    }
+
+    if (mode === 'register') {
+      if (!fullName.trim()) {
+        setErrorMessage('Veuillez indiquer votre prénom ou nom complet.');
+        return false;
+      }
+      if (!email.trim()) {
+        setErrorMessage('Veuillez indiquer une adresse email valide.');
+        return false;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        setErrorMessage('Format d\'adresse email invalide.');
+        return false;
+      }
+      if (!password || password.length < 6) {
+        setErrorMessage('Le mot de passe doit comporter au moins 6 caractères.');
+        return false;
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('La confirmation du mot de passe ne correspond pas.');
+        return false;
+      }
+    }
+
+    if (mode === 'forgot') {
+      if (!email.trim()) {
+        setErrorMessage('Veuillez indiquer votre adresse email.');
+        return false;
+      }
+    }
+
+    if (mode === 'reset') {
+      if (!password || password.length < 6) {
+        setErrorMessage('Le mot de passe doit comporter au moins 6 caractères.');
+        return false;
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('Les deux mots de passe ne correspondent pas.');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    setLoading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    try {
+      if (mode === 'login') {
+        await signIn(email.trim(), password);
+        if (onNavigate) onNavigate('dashboard');
+      } else if (mode === 'register') {
+        await signUp(email.trim(), password, fullName.trim(), companyName.trim() || `${fullName.trim()}'s Business`);
+        if (onNavigate) onNavigate('dashboard');
+      } else if (mode === 'forgot') {
+        await forgotPassword(email.trim());
+        setSuccessMessage(`Un lien de réinitialisation a été envoyé à ${email}. Vérifiez votre boîte de réception.`);
+      } else if (mode === 'reset') {
+        await resetPassword(password);
+        setSuccessMessage('Votre mot de passe a été mis à jour avec succès. Vous pouvez maintenant vous connecter.');
+        setTimeout(() => switchMode('login'), 2000);
+      }
+    } catch (err) {
+      console.error('Auth error:', err);
+      let userFriendlyMsg = err.message || 'Une erreur est survenue lors de l\'authentification.';
+      if (userFriendlyMsg.includes('Invalid login credentials')) {
+        userFriendlyMsg = 'Identifiants incorrects. Vérifiez votre email et mot de passe.';
+      } else if (userFriendlyMsg.includes('User already registered')) {
+        userFriendlyMsg = 'Un compte existe déjà avec cette adresse email.';
+      } else if (userFriendlyMsg.includes('Password should be at least')) {
+        userFriendlyMsg = 'Le mot de passe doit comporter au moins 6 caractères.';
+      }
+      setErrorMessage(userFriendlyMsg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -42,15 +146,16 @@ export default function Auth({ onLoginSuccess }) {
             <span>Komiya WhatsApp AI</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1.5 font-medium">
-            Le commercial IA connecté 24h/24 à votre WhatsApp
+            Plateforme SaaS de commercialisation WhatsApp 24h/24
           </p>
         </div>
 
-        {/* Tab switcher */}
-        {mode !== 'forgot' && (
+        {/* Tab switcher for Login / Register */}
+        {(mode === 'login' || mode === 'register') && (
           <div className="flex bg-slate-800/60 p-1 rounded-xl mb-6 border border-slate-700/50">
             <button
-              onClick={() => setMode('login')}
+              type="button"
+              onClick={() => switchMode('login')}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
                 mode === 'login' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
               }`}
@@ -58,7 +163,8 @@ export default function Auth({ onLoginSuccess }) {
               Connexion
             </button>
             <button
-              onClick={() => setMode('register')}
+              type="button"
+              onClick={() => switchMode('register')}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
                 mode === 'register' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
               }`}
@@ -68,58 +174,66 @@ export default function Auth({ onLoginSuccess }) {
           </div>
         )}
 
-        {isSubmitted && mode === 'forgot' ? (
-          <div className="text-center py-6">
-            <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-white mb-2">E-mail envoyé !</h3>
-            <p className="text-xs text-slate-400 mb-6">
-              Vérifiez votre boîte de réception <strong>{email}</strong> pour réinitialiser votre mot de passe.
-            </p>
-            <button
-              onClick={() => { setMode('login'); setIsSubmitted(false); }}
-              className="text-xs font-bold text-emerald-400 hover:underline"
-            >
-              Retour à la connexion
-            </button>
+        {/* Error notification */}
+        {errorMessage && (
+          <div className="mb-4 p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start space-x-2 text-rose-300 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+            <span className="leading-relaxed">{errorMessage}</span>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Nom complet</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="text"
-                      required
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder="Ex: Jean Kouassi"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
+        )}
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Nom de l'entreprise</label>
-                  <div className="relative">
-                    <Building className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="text"
-                      required
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="Ex: Komiya Commerce"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-              </>
-            )}
+        {/* Success notification */}
+        {successMessage && (
+          <div className="mb-4 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start space-x-2 text-emerald-300 text-xs">
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+            <span className="leading-relaxed">{successMessage}</span>
+          </div>
+        )}
 
+        {/* Forms */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === 'register' && (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Prénom & Nom complet <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Ex: Jean-Marc Kouassi"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Nom de votre entreprise <span className="text-slate-500">(optionnel)</span>
+                </label>
+                <div className="relative">
+                  <Building className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Ex: Mon Entreprise"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {mode !== 'reset' && (
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Adresse E-mail</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Adresse email professionnelle <span className="text-rose-400">*</span>
+              </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
@@ -127,74 +241,103 @@ export default function Auth({ onLoginSuccess }) {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="votre@email.com"
+                  placeholder="nom@entreprise.com"
                   className="w-full pl-9 pr-3 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
             </div>
+          )}
 
-            {mode !== 'forgot' && (
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-300">Mot de passe</label>
-                  {mode === 'login' && (
-                    <button
-                      type="button"
-                      onClick={() => setMode('forgot')}
-                      className="text-[11px] text-emerald-400 hover:underline font-medium"
-                    >
-                      Mot de passe oublié ?
-                    </button>
-                  )}
-                </div>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
+          {mode !== 'forgot' && (
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  {mode === 'reset' ? 'Nouveau mot de passe' : 'Mot de passe'} <span className="text-rose-400">*</span>
+                </label>
+                {mode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => switchMode('forgot')}
+                    className="text-[11px] text-emerald-400 hover:underline font-medium"
+                  >
+                    Mot de passe oublié ?
+                  </button>
+                )}
               </div>
-            )}
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Au moins 6 caractères"
+                  className="w-full pl-9 pr-10 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
 
+          {(mode === 'register' || mode === 'reset') && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Confirmer le mot de passe <span className="text-rose-400">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Répétez le mot de passe identique"
+                  className="w-full pl-9 pr-3 py-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full mt-2 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center space-x-2"
+          >
+            {loading ? (
+              <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <span>
+                  {mode === 'login' && 'Se connecter'}
+                  {mode === 'register' && 'Créer mon compte SaaS'}
+                  {mode === 'forgot' && 'Envoyer le lien de réinitialisation'}
+                  {mode === 'reset' && 'Changer mon mot de passe'}
+                </span>
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+              </>
+            )}
+          </button>
+
+          {(mode === 'forgot' || mode === 'reset') && (
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full mt-2 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center space-x-2"
+              type="button"
+              onClick={() => switchMode('login')}
+              className="w-full text-center text-xs text-slate-400 hover:text-white pt-2 font-medium"
             >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <span>
-                    {mode === 'login' && 'Se connecter'}
-                    {mode === 'register' && 'Créer mon compte SaaS'}
-                    {mode === 'forgot' && 'Réinitialiser le mot de passe'}
-                  </span>
-                  <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-                </>
-              )}
+              ← Retour à la connexion
             </button>
-
-            {mode === 'forgot' && (
-              <button
-                type="button"
-                onClick={() => setMode('login')}
-                className="w-full text-center text-xs text-slate-400 hover:text-white pt-2 font-medium"
-              >
-                ← Annuler et revenir
-              </button>
-            )}
-          </form>
-        )}
+          )}
+        </form>
 
         <div className="mt-8 pt-4 border-t border-slate-800 text-center">
           <p className="text-[11px] text-slate-500 font-medium">
-            Komiya WhatsApp AI Platform • Connexion WASenderAPI Sécurisée
+            Komiya WhatsApp AI Platform • Authentification Sécurisée Supabase
           </p>
         </div>
       </div>

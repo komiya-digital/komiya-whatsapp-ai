@@ -1,60 +1,90 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MessageSquare, Key, Phone, RefreshCw, CheckCircle2, XCircle, Copy, Link, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
+import { getWhatsAppConnection, upsertWhatsAppConnection } from '../lib/supabaseClient';
 
-export default function WhatsAppSetup({ state, onUpdateState }) {
-  const [apiKey, setApiKey] = useState(state.whatsapp.apiKey || '');
-  const [phoneNumber, setPhoneNumber] = useState(state.whatsapp.phoneNumber || '+2250586896826');
-  const [sessionId, setSessionId] = useState(state.whatsapp.sessionId || '121080');
-  const [loading, setLoading] = useState(false);
+export default function WhatsAppSetup() {
+  const { business } = useAuth();
+
+  const [apiKey, setApiKey] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [sessionId, setSessionId] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
   const webhookUrl = `${window.location.origin}/api/webhooks/wasender`;
 
-  const handleConnect = () => {
-    setLoading(true);
-    setStatusMessage('');
-
-    setTimeout(() => {
+  const loadData = useCallback(async () => {
+    if (!business?.id) {
       setLoading(false);
-      onUpdateState({
-        whatsapp: {
-          ...state.whatsapp,
-          apiKey,
-          phoneNumber,
-          sessionId,
-          isConnected: true,
-          status: 'connected',
-          lastSyncAt: new Date().toISOString()
-        }
-      });
-      setStatusMessage('🟢 WhatsApp connecté avec succès ! La session WASender #121080 est active.');
-    }, 800);
-  };
-
-  const handleCheck = () => {
-    setLoading(true);
-    setStatusMessage('');
-
-    setTimeout(() => {
-      setLoading(false);
-      if (state.whatsapp.isConnected) {
-        setStatusMessage('✅ Connexion vérifiée. La session WASender (Komiya Digital +2250586896826) répond parfaitement.');
-      } else {
-        setStatusMessage('⚠️ WhatsApp n\'est pas connecté. Veuillez cliquer sur "Connecter WhatsApp".');
+      return;
+    }
+    try {
+      setLoading(true);
+      const conn = await getWhatsAppConnection(business.id);
+      if (conn) {
+        setApiKey(conn.apiKey || '');
+        setPhoneNumber(conn.phoneNumber || '');
+        setSessionId(conn.sessionId || '');
+        setIsConnected(Boolean(conn.isConnected));
       }
-    }, 600);
+    } catch (err) {
+      console.error('Error loading WhatsApp connection:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [business?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleConnect = async () => {
+    if (!business?.id) return;
+    setActionLoading(true);
+    setStatusMessage('');
+
+    try {
+      await upsertWhatsAppConnection(business.id, {
+        apiKey,
+        phoneNumber,
+        sessionId,
+        isConnected: true,
+        status: 'connected'
+      });
+      setIsConnected(true);
+      setStatusMessage('🟢 WhatsApp connecté avec succès ! Vos conversations seront désormais synchronisées pour votre entreprise.');
+    } catch (err) {
+      console.error('Error saving WhatsApp connection:', err);
+      setStatusMessage('⚠️ Erreur lors de la sauvegarde de la connexion.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleDisconnect = () => {
-    onUpdateState({
-      whatsapp: {
-        ...state.whatsapp,
+  const handleDisconnect = async () => {
+    if (!business?.id) return;
+    setActionLoading(true);
+    setStatusMessage('');
+
+    try {
+      await upsertWhatsAppConnection(business.id, {
+        apiKey,
+        phoneNumber,
+        sessionId,
         isConnected: false,
         status: 'disconnected'
-      }
-    });
-    setStatusMessage('🔴 WhatsApp déconnecté.');
+      });
+      setIsConnected(false);
+      setStatusMessage('🔴 WhatsApp déconnecté.');
+    } catch (err) {
+      console.error('Error disconnecting WhatsApp:', err);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleCopyWebhook = () => {
@@ -63,6 +93,15 @@ export default function WhatsAppSetup({ state, onUpdateState }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  if (loading) {
+    return (
+      <div className="text-center py-20 bg-white rounded-2xl border border-slate-200">
+        <RefreshCw className="w-8 h-8 animate-spin text-emerald-500 mx-auto mb-3" />
+        <p className="text-sm font-semibold text-slate-700">Chargement de votre connexion WhatsApp...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
@@ -70,19 +109,19 @@ export default function WhatsAppSetup({ state, onUpdateState }) {
         <div>
           <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
             <MessageSquare className="w-5 h-5 text-emerald-500" />
-            <span>Connexion WASenderAPI</span>
+            <span>Connexion WhatsApp (WASenderAPI)</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Connectez votre numéro WhatsApp via WASenderAPI pour autoriser le commercial IA à répondre.
+            Associez le numéro WhatsApp de votre entreprise via WASenderAPI pour permettre à votre commercial IA de répondre à vos prospects.
           </p>
         </div>
 
         {/* Status Badge */}
         <div className="flex items-center space-x-2">
-          {state.whatsapp.isConnected ? (
+          {isConnected ? (
             <span className="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center space-x-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>🟢 Connecté (Komiya Digital)</span>
+              <span>🟢 Connecté {phoneNumber ? `(${phoneNumber})` : ''}</span>
             </span>
           ) : (
             <span className="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-rose-100 text-rose-800 border border-rose-300 flex items-center space-x-1.5">
@@ -107,7 +146,7 @@ export default function WhatsAppSetup({ state, onUpdateState }) {
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-5">
         <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center space-x-2">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <span>Paramètres de session WASenderAPI</span>
+          <span>Paramètres de session WASenderAPI pour {business?.name || 'votre entreprise'}</span>
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -125,12 +164,12 @@ export default function WhatsAppSetup({ state, onUpdateState }) {
                 className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Généré depuis votre tableau de bord WASenderAPI</p>
+            <p className="text-[11px] text-slate-400 mt-1">Généré depuis votre compte WASenderAPI</p>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Numéro WhatsApp connecté
+              Numéro WhatsApp professionnel
             </label>
             <div className="relative">
               <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -138,11 +177,11 @@ export default function WhatsAppSetup({ state, onUpdateState }) {
                 type="text"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="+2250586896826"
+                placeholder="+22500000000"
                 className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Au format international avec indicatif pays</p>
+            <p className="text-[11px] text-slate-400 mt-1">Format international avec indicatif pays</p>
           </div>
         </div>
 
@@ -154,7 +193,7 @@ export default function WhatsAppSetup({ state, onUpdateState }) {
             type="text"
             value={sessionId}
             onChange={(e) => setSessionId(e.target.value)}
-            placeholder="121080"
+            placeholder="Ex: 121080"
             className="w-full max-w-xs px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
           />
         </div>
@@ -163,28 +202,22 @@ export default function WhatsAppSetup({ state, onUpdateState }) {
         <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3">
           <button
             onClick={handleConnect}
-            disabled={loading}
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center space-x-2"
+            disabled={actionLoading}
+            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center space-x-2"
           >
-            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            <span>Connecter WhatsApp</span>
+            {actionLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            <span>Enregistrer & Connecter</span>
           </button>
 
-          <button
-            onClick={handleCheck}
-            disabled={loading}
-            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all border border-slate-200 flex items-center space-x-1.5"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Vérifier la connexion</span>
-          </button>
-
-          <button
-            onClick={handleDisconnect}
-            className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl transition-all border border-rose-200"
-          >
-            Déconnecter
-          </button>
+          {isConnected && (
+            <button
+              onClick={handleDisconnect}
+              disabled={actionLoading}
+              className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl transition-all border border-rose-200"
+            >
+              Déconnecter
+            </button>
+          )}
         </div>
       </div>
 
@@ -196,7 +229,7 @@ export default function WhatsAppSetup({ state, onUpdateState }) {
         </div>
 
         <p className="text-xs text-slate-300">
-          Pour recevoir les messages WhatsApp en temps réel, copiez cette URL Webhook et collez-la dans la configuration de votre session WASenderAPI :
+          Pour recevoir les messages de vos prospects en direct, copiez cette URL Webhook et collez-la dans la configuration de votre session WASenderAPI :
         </p>
 
         <div className="flex items-center space-x-2 bg-slate-800/90 p-2.5 rounded-xl border border-slate-700">
@@ -215,7 +248,7 @@ export default function WhatsAppSetup({ state, onUpdateState }) {
         <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-start space-x-2.5">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <p className="text-xs text-amber-200/90 leading-relaxed">
-            Événements à cocher sur WASenderAPI : <strong>messages.received</strong>, <strong>messages.upsert</strong>, <strong>session.status</strong>.
+            Événements à cocher dans votre interface WASenderAPI : <strong>messages.received</strong>, <strong>messages.upsert</strong>, <strong>session.status</strong>.
           </p>
         </div>
       </div>

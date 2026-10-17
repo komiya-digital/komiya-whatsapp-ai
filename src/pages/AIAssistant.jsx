@@ -1,32 +1,92 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Bot, Sparkles, Send, RefreshCw, CheckCircle2, X } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
+import { getAiAgent, upsertAiAgent, getProducts } from '../lib/supabaseClient';
 
-export default function AIAssistant({ state, onUpdateState }) {
-  const [formData, setFormData] = useState({ ...state.aiAgent });
+export default function AIAssistant() {
+  const { business } = useAuth();
+
+  const [formData, setFormData] = useState({
+    name: 'Awa',
+    country: business?.country || 'Côte d\'Ivoire',
+    companyDescription: business?.description || '',
+    tone: 'Professionnel',
+    objective: 'Vendre + qualifier',
+    customInstructions: '',
+    isActive: true
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
 
   // Live Test simulator state
-  const [testMessages, setTestMessages] = useState([
-    { role: 'model', text: `Bonjour ! Je suis ${formData.name || 'Awa'}, l'assistant commercial IA de ${state.business?.name || 'notre entreprise'}. Comment puis-je vous aider aujourd'hui ?` }
-  ]);
+  const [testMessages, setTestMessages] = useState([]);
   const [inputTest, setInputTest] = useState('');
   const [testLoading, setTestLoading] = useState(false);
+  const [businessProducts, setBusinessProducts] = useState([]);
 
-  const handleSave = (e) => {
+  const loadData = useCallback(async () => {
+    if (!business?.id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const [agent, prods] = await Promise.all([
+        getAiAgent(business.id).catch(() => null),
+        getProducts(business.id).catch(() => [])
+      ]);
+
+      if (agent) {
+        setFormData({
+          name: agent.name || 'Awa',
+          country: agent.country || business.country || 'Côte d\'Ivoire',
+          companyDescription: agent.companyDescription || business.description || '',
+          tone: agent.tone || 'Professionnel',
+          objective: agent.objective || 'Vendre + qualifier',
+          customInstructions: agent.customInstructions || '',
+          isActive: agent.isActive ?? true
+        });
+      }
+      setBusinessProducts(prods || []);
+      setTestMessages([
+        { role: 'model', text: `Bonjour ! Je suis ${agent?.name || 'Awa'}, l'assistant commercial IA de ${business.name || 'notre entreprise'}. Comment puis-je vous aider aujourd'hui ?` }
+      ]);
+    } catch (err) {
+      console.error('Error fetching AI agent:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [business?.id, business?.name, business?.country, business?.description]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    onUpdateState({
-      aiAgent: { ...formData }
-    });
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    if (!business?.id) return;
+
+    setSaving(true);
+    try {
+      await upsertAiAgent(business.id, formData);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+    } catch (err) {
+      console.error('Error saving AI config:', err);
+      alert('Erreur lors de l\'enregistrement de la configuration IA.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSendTest = async (e) => {
     e.preventDefault();
     if (!inputTest.trim()) return;
 
-    const userText = inputTest;
+    const userText = inputTest.trim();
     setInputTest('');
     setTestMessages(prev => [...prev, { role: 'user', text: userText }]);
     setTestLoading(true);
@@ -39,18 +99,27 @@ export default function AIAssistant({ state, onUpdateState }) {
           incomingMessage: userText,
           history: testMessages,
           agentConfig: formData,
-          products: state.products
+          products: businessProducts
         })
       });
 
       const data = await res.json();
       setTestMessages(prev => [...prev, { role: 'model', text: data.replyText || "Je vais vérifier cela pour vous." }]);
     } catch (err) {
-      setTestMessages(prev => [...prev, { role: 'model', text: "Bonjour ! Merci pour votre message. Comment puis-je vous aider aujourd'hui ?" }]);
+      setTestMessages(prev => [...prev, { role: 'model', text: "Bonjour ! Comment puis-je vous renseigner ?" }]);
     } finally {
       setTestLoading(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="text-center py-20 bg-white rounded-2xl border border-slate-200">
+        <RefreshCw className="w-8 h-8 animate-spin text-emerald-500 mx-auto mb-3" />
+        <p className="text-sm font-semibold text-slate-700">Chargement de votre assistant commercial IA...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -62,7 +131,7 @@ export default function AIAssistant({ state, onUpdateState }) {
             <span>Configuration de l'Assistant IA</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Personnalisez le comportement, le ton et les objectifs de votre commercial WhatsApp IA ("Awa").
+            Personnalisez le prénom, le ton et les instructions commerciales de votre assistant WhatsApp ("{formData.name}").
           </p>
         </div>
 
@@ -78,7 +147,7 @@ export default function AIAssistant({ state, onUpdateState }) {
       {isSaved && (
         <div className="p-4 rounded-xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center space-x-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>Configuration de l'Assistant IA enregistrée avec succès !</span>
+          <span>Configuration de l'Assistant IA enregistrée dans Supabase avec succès !</span>
         </div>
       )}
 
@@ -86,18 +155,18 @@ export default function AIAssistant({ state, onUpdateState }) {
       <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Nom de l'assistant</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Nom ou prénom de l'assistant</label>
             <input
               type="text"
               value={formData.name || ''}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Ex: Awa"
+              placeholder="Ex: Awa ou Karim"
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Zone géographique</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Zone géographique / Pays</label>
             <input
               type="text"
               value={formData.country || ''}
@@ -109,19 +178,19 @@ export default function AIAssistant({ state, onUpdateState }) {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">Description de l'entreprise</label>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">Description de votre entreprise</label>
           <textarea
             rows={2}
             value={formData.companyDescription || ''}
             onChange={(e) => setFormData({ ...formData, companyDescription: e.target.value })}
-            placeholder="Présentez brièvement votre entreprise et vos activités..."
+            placeholder="Présentez brièvement vos offres, produits et valeurs..."
             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Ton de conversation</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Ton de communication</label>
             <select
               value={formData.tone || 'Professionnel'}
               onChange={(e) => setFormData({ ...formData, tone: e.target.value })}
@@ -135,7 +204,7 @@ export default function AIAssistant({ state, onUpdateState }) {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Objectif principal</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Objectif commercial prioritaire</label>
             <select
               value={formData.objective || 'Vendre + qualifier'}
               onChange={(e) => setFormData({ ...formData, objective: e.target.value })}
@@ -151,12 +220,12 @@ export default function AIAssistant({ state, onUpdateState }) {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">Instructions supplémentaires (Prompt Guardrails)</label>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">Consignes spécifiques (Instructions IA)</label>
           <textarea
             rows={4}
             value={formData.customInstructions || ''}
             onChange={(e) => setFormData({ ...formData, customInstructions: e.target.value })}
-            placeholder="Ex: Pose une question à la fois. Réponds simplement en français. Lorsque le prospect est intéressé, récupère son nom, téléphone et budget..."
+            placeholder="Ex: Pose une question à la fois. Réponds poliment. Demande le nom, budget et besoin avant de marquer comme qualifié..."
             className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-emerald-500"
           />
         </div>
@@ -164,9 +233,10 @@ export default function AIAssistant({ state, onUpdateState }) {
         <div className="pt-3 border-t border-slate-100 flex justify-end">
           <button
             type="submit"
-            className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 transition-all"
+            disabled={saving}
+            className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 transition-all"
           >
-            Enregistrer la configuration IA
+            {saving ? 'Enregistrement...' : 'Enregistrer la configuration IA'}
           </button>
         </div>
       </form>
@@ -179,7 +249,7 @@ export default function AIAssistant({ state, onUpdateState }) {
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Bot className="w-5 h-5 text-emerald-400" />
-                <span className="font-bold text-sm">Simulateur - Tester {formData.name || 'Awa'}</span>
+                <span className="font-bold text-sm">Simulateur - Tester {formData.name || 'votre assistant'}</span>
               </div>
               <button 
                 onClick={() => setShowTestModal(false)}
@@ -206,7 +276,7 @@ export default function AIAssistant({ state, onUpdateState }) {
                 <div className="flex justify-start">
                   <div className="bg-white border border-slate-200 p-3 rounded-2xl text-xs text-slate-500 flex items-center space-x-2">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-500" />
-                    <span>Awa réfléchit...</span>
+                    <span>L'IA réfléchit...</span>
                   </div>
                 </div>
               )}

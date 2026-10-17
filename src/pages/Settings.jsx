@@ -1,23 +1,59 @@
-import React, { useState } from 'react';
-import { Settings, User, Building, MessageSquare, Bot, Bell, Shield, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, User, Building, MessageSquare, Bot, Bell, Shield, CheckCircle2, RefreshCw } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
+import { getWhatsAppConnection, getAiAgent } from '../lib/supabaseClient';
 
-export default function SettingsPage({ state, onUpdateState }) {
+export default function SettingsPage() {
+  const { user, profile, business, updateProfileData, updateBusinessData } = useAuth();
+
   const [activeTab, setActiveTab] = useState('profile');
-  const [fullName, setFullName] = useState(state.user.fullName || 'Komiya Digital');
-  const [email, setEmail] = useState(state.user.email || 'contact@komiyadigital.ci');
-  const [companyName, setCompanyName] = useState(state.business.name || 'Komiya Commerce');
-  const [country, setCountry] = useState(state.business.country || 'Côte d\'Ivoire');
-  const [currency, setCurrency] = useState(state.business.currency || 'FCFA');
+  const [fullName, setFullName] = useState(profile?.full_name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [companyName, setCompanyName] = useState(business?.name || '');
+  const [country, setCountry] = useState(business?.country || 'Côte d\'Ivoire');
+  const [currency, setCurrency] = useState(business?.currency || 'FCFA');
   const [isSaved, setIsSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = (e) => {
+  const [waConn, setWaConn] = useState(null);
+  const [aiAgent, setAiAgent] = useState(null);
+
+  useEffect(() => {
+    if (profile?.full_name) setFullName(profile.full_name);
+    if (user?.email) setEmail(user.email);
+    if (business?.name) setCompanyName(business.name);
+    if (business?.country) setCountry(business.country);
+    if (business?.currency) setCurrency(business.currency);
+
+    if (business?.id) {
+      getWhatsAppConnection(business.id).then(setWaConn).catch(() => {});
+      getAiAgent(business.id).then(setAiAgent).catch(() => {});
+    }
+  }, [profile, user, business]);
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    onUpdateState({
-      user: { ...state.user, fullName, email },
-      business: { ...state.business, name: companyName, country, currency }
-    });
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    setSaving(true);
+
+    try {
+      if (fullName) {
+        await updateProfileData({ full_name: fullName });
+      }
+      if (business?.id) {
+        await updateBusinessData({
+          name: companyName,
+          country,
+          currency
+        });
+      }
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      alert('Erreur lors de la sauvegarde des paramètres.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tabs = [
@@ -26,7 +62,7 @@ export default function SettingsPage({ state, onUpdateState }) {
     { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
     { id: 'ai', label: 'IA', icon: Bot },
     { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'security', label: 'Sécurité', icon: Shield },
+    { id: 'security', label: 'Sécurité & RLS', icon: Shield },
   ];
 
   return (
@@ -35,17 +71,17 @@ export default function SettingsPage({ state, onUpdateState }) {
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
         <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
           <Settings className="w-5 h-5 text-emerald-500" />
-          <span>Paramètres de la Plateforme</span>
+          <span>Paramètres de votre Espace</span>
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          Gérez votre profil utilisateur, les informations d'entreprise et les clés de sécurité.
+          Gérez votre profil utilisateur, les informations de votre entreprise et l'isolation des données.
         </p>
       </div>
 
       {isSaved && (
         <div className="p-4 rounded-xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center space-x-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>Paramètres sauvegardés avec succès !</span>
+          <span>Paramètres sauvegardés avec succès dans Supabase !</span>
         </div>
       )}
 
@@ -80,17 +116,19 @@ export default function SettingsPage({ state, onUpdateState }) {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
+                placeholder="Votre nom complet"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Adresse email</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Adresse email (Supabase Auth)</label>
               <input
                 type="email"
+                disabled
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-500 cursor-not-allowed"
               />
+              <p className="text-[11px] text-slate-400 mt-1">L'adresse email est liée à votre compte d'authentification Supabase.</p>
             </div>
           </div>
         )}
@@ -104,6 +142,7 @@ export default function SettingsPage({ state, onUpdateState }) {
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Nom de votre entreprise"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
               />
             </div>
@@ -135,9 +174,14 @@ export default function SettingsPage({ state, onUpdateState }) {
 
         {activeTab === 'whatsapp' && (
           <div className="space-y-3 text-xs text-slate-600">
-            <h3 className="font-bold text-sm text-slate-900">Paramètres WASenderAPI</h3>
-            <p>Session ID : <strong>121080</strong></p>
-            <p>Statut : <span className="text-emerald-600 font-bold">🟢 Connecté (Komiya Digital)</span></p>
+            <h3 className="font-bold text-sm text-slate-900">Paramètres de session WASender</h3>
+            <p>Session ID : <strong>{waConn?.sessionId || 'Non configurée'}</strong></p>
+            <p>Numéro connecté : <strong>{waConn?.phoneNumber || 'Aucun numéro'}</strong></p>
+            <p>Statut : 
+              <span className={`font-bold ml-1.5 ${waConn?.isConnected ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {waConn?.isConnected ? '🟢 Connecté' : '🔴 Déconnecté'}
+              </span>
+            </p>
           </div>
         )}
 
@@ -145,7 +189,9 @@ export default function SettingsPage({ state, onUpdateState }) {
           <div className="space-y-3 text-xs text-slate-600">
             <h3 className="font-bold text-sm text-slate-900">Paramètres Moteur IA</h3>
             <p>Modèle LLM : <strong>Gemini 2.5 Flash</strong></p>
-            <p>Nom de l'Agent : <strong>{state.aiAgent.name}</strong></p>
+            <p>Nom de l'Agent : <strong>{aiAgent?.name || 'Awa'}</strong></p>
+            <p>Ton : <strong>{aiAgent?.tone || 'Professionnel'}</strong></p>
+            <p>Objectif : <strong>{aiAgent?.objective || 'Vendre + qualifier'}</strong></p>
           </div>
         )}
 
@@ -164,20 +210,28 @@ export default function SettingsPage({ state, onUpdateState }) {
         )}
 
         {activeTab === 'security' && (
-          <div className="space-y-3 text-xs">
-            <h3 className="font-bold text-sm text-slate-900">Sécurité et RLS Supabase</h3>
-            <p className="text-slate-600">Toutes les données sont isolées par entreprise avec Row Level Security (RLS).</p>
+          <div className="space-y-3 text-xs text-slate-600">
+            <h3 className="font-bold text-sm text-slate-900">Sécurité et Row Level Security (RLS)</h3>
+            <p>
+              Votre compte est protégé par les politiques RLS de Supabase. Votre identifiant unique de propriétaire (<code>{user?.id}</code>) garantit qu'aucun autre utilisateur ne peut accéder à vos prospects, conversations ou produits.
+            </p>
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900">
+              🔒 <strong>Isolation multi-tenant active :</strong> Données isolées par <code>business_id</code>.
+            </div>
           </div>
         )}
 
-        <div className="pt-3 border-t border-slate-100 flex justify-end">
-          <button
-            type="submit"
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20"
-          >
-            Sauvegarder les modifications
-          </button>
-        </div>
+        {(activeTab === 'profile' || activeTab === 'business') && (
+          <div className="pt-3 border-t border-slate-100 flex justify-end">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20"
+            >
+              {saving ? 'Sauvegarde...' : 'Sauvegarder les modifications'}
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );

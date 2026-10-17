@@ -1,124 +1,131 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  MessageSquare, 
-  Bot, 
-  Users, 
-  MessageCircle, 
-  Package, 
-  Zap, 
-  BarChart3, 
-  Settings, 
-  LogOut, 
-  Sparkles,
-  CheckCircle2,
-  XCircle,
-  Menu,
-  X
-} from 'lucide-react';
+import { useAuth } from '../../lib/AuthContext';
 
-export default function Sidebar({ currentTab, setCurrentTab, isConnected, onLogout, isMobileOpen, setIsMobileOpen }) {
+export default function Sidebar({ currentTab, onNavigate, isConnected, isMobileOpen, setIsMobileOpen }) {
+  const { user, profile, business, signOut } = useAuth();
+
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
-    { id: 'assistant', label: 'Assistant IA', icon: Bot },
-    { id: 'prospects', label: 'Prospects', icon: Users },
-    { id: 'conversations', label: 'Conversations', icon: MessageCircle, badge: 1 },
-    { id: 'products', label: 'Produits', icon: Package },
-    { id: 'automations', label: 'Automatisations', icon: Zap },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'settings', label: 'Paramètres', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', icon: 'grid_view' },
+    { id: 'whatsapp', label: 'WhatsApp', icon: 'chat' },
+    { id: 'assistant', label: 'Assistant IA', icon: 'smart_toy' },
+    { id: 'prospects', label: 'Prospects', icon: 'contacts' },
+    { id: 'conversations', label: 'Conversations', icon: 'forum', badge: null },
+    { id: 'products', label: 'Produits', icon: 'inventory_2' },
+    { id: 'automations', label: 'Automatisations', icon: 'account_tree' },
+    { id: 'analytics', label: 'Analytics', icon: 'analytics' },
+    { id: 'settings', label: 'Paramètres', icon: 'settings' },
   ];
+
+  const handleLogout = async () => {
+    await signOut();
+    if (onNavigate) {
+      onNavigate('login');
+    }
+  };
+
+  const displayName = profile?.full_name || user?.user_metadata?.full_name || business?.name || 'Administrateur';
+  const displayEmail = user?.email || 'admin@synapsewa.com';
+  const initials = displayName
+    .split(' ')
+    .map(p => p[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase() || 'SW';
 
   return (
     <>
       {/* Mobile Backdrop */}
       {isMobileOpen && (
         <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-on-surface/40 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
 
-      {/* Sidebar Container */}
+      {/* Sidebar Container - Exact Stitch Style */}
       <aside className={`
-        fixed top-0 bottom-0 left-0 z-50 w-64 bg-slate-900 text-slate-100 flex flex-col justify-between border-r border-slate-800 transition-transform duration-300 ease-in-out lg:translate-x-0
+        fixed top-0 bottom-0 left-0 z-50 w-72 bg-surface-container-lowest text-on-surface flex flex-col justify-between border-r border-outline-variant/30 shadow-[0_1px_8px_rgba(0,0,0,0.04)] transition-transform duration-300 ease-in-out lg:translate-x-0
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Brand Header */}
-        <div>
-          <div className="flex items-center justify-between p-5 border-b border-slate-800">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                <Sparkles className="w-5 h-5 text-slate-900 stroke-[2.5]" />
+        {/* Top Header & Navigation */}
+        <div className="p-space-md flex flex-col gap-space-sm">
+          {/* SynapseWA Brand Logo & Header */}
+          <div className="flex items-center justify-between px-space-xs py-space-xs">
+            <div className="flex items-center gap-space-sm cursor-pointer" onClick={() => onNavigate && onNavigate('dashboard')}>
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-primary-container flex items-center justify-center shadow-md shadow-primary-container/20 text-white font-extrabold text-sm tracking-tight">
+                S
               </div>
-              <div>
-                <h1 className="font-bold text-base tracking-tight text-white flex items-center space-x-1.5">
-                  <span>Komiya</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/30">AI</span>
-                </h1>
-                <p className="text-xs text-slate-400 font-medium">WhatsApp Commercial IA</p>
+              <div className="flex flex-col">
+                <span className="font-bold text-base text-on-surface leading-tight tracking-tight">SynapseWA</span>
+                <span className="text-xs text-on-surface-variant font-medium">Commercial IA</span>
               </div>
             </div>
             <button 
               onClick={() => setIsMobileOpen(false)}
-              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              className="lg:hidden p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
             >
-              <X className="w-5 h-5" />
+              <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
 
-          {/* Connection Status Indicator */}
-          <div className="mx-4 my-4 p-3 rounded-xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-between">
-            <div className="flex items-center space-x-2.5">
-              {isConnected ? (
-                <div className="relative flex items-center justify-center">
-                  <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </div>
-              ) : (
-                <span className="inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-              )}
-              <span className="text-xs font-semibold tracking-wide text-slate-200">
-                WhatsApp API
+          {/* WhatsApp Connection Status Box */}
+          <div className="mt-space-xs p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between shadow-[0_1px_2px_rgba(15,23,42,0.05)] border border-outline-variant/20">
+            <div className="flex items-center gap-space-sm min-w-0">
+              <span className="relative flex h-2 w-2 flex-shrink-0">
+                {isConnected ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-container opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                  </>
+                ) : (
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-error"></span>
+                )}
               </span>
+              <div className="flex flex-col truncate">
+                <span className="text-xs font-semibold text-on-surface truncate">
+                  {isConnected ? 'Connecté' : 'Non connecté'}
+                </span>
+                <span className="text-[11px] text-on-surface-variant truncate font-mono">
+                  {isConnected ? 'WasenderAPI actif' : 'WhatsApp Hors Ligne'}
+                </span>
+              </div>
             </div>
-            {isConnected ? (
-              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                🟢 Connecté
-              </span>
-            ) : (
-              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                🔴 Non connecté
-              </span>
-            )}
+            <button 
+              onClick={() => onNavigate && onNavigate('whatsapp')}
+              className="p-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" 
+              title="Configurer WhatsApp"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[16px]">sync</span>
+            </button>
           </div>
 
           {/* Navigation Links */}
-          <nav className="px-3 space-y-1">
+          <nav className="mt-space-sm flex flex-col gap-1">
             {navItems.map((item) => {
-              const Icon = item.icon;
               const isActive = currentTab === item.id;
               return (
                 <button
                   key={item.id}
                   onClick={() => {
-                    setCurrentTab(item.id);
+                    if (onNavigate) onNavigate(item.id);
                     setIsMobileOpen(false);
                   }}
                   className={`
-                    w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150
+                    w-full flex items-center justify-between px-space-sm py-2 rounded-lg text-sm transition-colors text-left
                     ${isActive 
-                      ? 'bg-emerald-500 text-slate-950 font-semibold shadow-md shadow-emerald-500/15' 
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80'}
+                      ? 'bg-surface-container-high text-primary font-semibold shadow-xs' 
+                      : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-medium'}
                   `}
                 >
-                  <div className="flex items-center space-x-3">
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-slate-950 stroke-[2.5]' : 'text-slate-400'}`} />
-                    <span>{item.label}</span>
+                  <div className="flex items-center gap-space-sm truncate">
+                    <span className={`material-symbols-outlined text-[20px] ${isActive ? 'text-primary' : 'text-on-surface-variant'}`}>
+                      {item.icon}
+                    </span>
+                    <span className="truncate">{item.label}</span>
                   </div>
                   {item.badge && (
-                    <span className={`px-2 py-0.5 text-xs rounded-full font-bold ${isActive ? 'bg-slate-950 text-white' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                    <span className="px-1.5 py-0.5 rounded-full bg-primary text-on-primary text-[11px] font-bold leading-none">
                       {item.badge}
                     </span>
                   )}
@@ -129,25 +136,26 @@ export default function Sidebar({ currentTab, setCurrentTab, isConnected, onLogo
         </div>
 
         {/* Footer User Info & Logout */}
-        <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center justify-between mb-3 px-1">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center font-bold text-xs text-slate-200">
-                KD
+        <div className="p-space-md bg-surface-container-lowest border-t border-outline-variant/20">
+          <div className="p-space-sm rounded-lg bg-surface-container-low flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-space-sm min-w-0">
+              <div className="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                {initials}
               </div>
-              <div className="text-left">
-                <p className="text-xs font-semibold text-white leading-tight">Komiya Digital</p>
-                <p className="text-[11px] text-slate-400">contact@komiyadigital.ci</p>
+              <div className="flex flex-col truncate">
+                <span className="text-xs font-semibold text-on-surface truncate">{displayName}</span>
+                <span className="text-[11px] text-on-surface-variant truncate">{displayEmail}</span>
               </div>
             </div>
+            <button 
+              onClick={handleLogout}
+              className="p-1.5 rounded-lg text-on-surface-variant hover:text-error hover:bg-error-container/30 transition-colors shrink-0" 
+              title="Se déconnecter"
+              type="button"
+            >
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+            </button>
           </div>
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-colors"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Déconnexion</span>
-          </button>
         </div>
       </aside>
     </>

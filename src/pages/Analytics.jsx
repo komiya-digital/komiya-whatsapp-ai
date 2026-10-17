@@ -1,18 +1,52 @@
-import React, { useState } from 'react';
-import { BarChart3, TrendingUp, Users, MessageSquare, Clock, Award, DollarSign } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { BarChart3, TrendingUp, Users, MessageSquare, Clock, Award, DollarSign, RefreshCw } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
+import { getAnalyticsStats } from '../lib/supabaseClient';
 
 export default function Analytics() {
+  const { business } = useAuth();
+
   const [period, setPeriod] = useState('7d'); // 'today', '7d', '30d'
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    conversations: 0,
+    contacts: 0,
+    messages: 0,
+    qualified: 0,
+    clients: 0,
+    qualificationRate: '0%',
+    conversionRate: '0%'
+  });
+
+  const loadData = useCallback(async () => {
+    if (!business?.id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const data = await getAnalyticsStats(business.id, period);
+      setStats(data);
+    } catch (err) {
+      console.error('Error fetching analytics:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [business?.id, period]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const metrics = [
-    { label: 'Nombre de conversations', value: period === 'today' ? '18' : period === '7d' ? '142' : '580', icon: MessageSquare, color: 'text-blue-500' },
-    { label: 'Messages envoyés', value: period === 'today' ? '142' : period === '7d' ? '1,120' : '4,850', icon: TrendingUp, color: 'text-emerald-500' },
-    { label: 'Prospects générés', value: period === 'today' ? '12' : period === '7d' ? '95' : '390', icon: Users, color: 'text-indigo-500' },
-    { label: 'Prospects qualifiés', value: period === 'today' ? '8' : period === '7d' ? '74' : '305', icon: Award, color: 'text-purple-500' },
-    { label: 'Clients / Conversions', value: period === 'today' ? '3' : period === '7d' ? '28' : '112', icon: DollarSign, color: 'text-emerald-400' },
-    { label: 'Taux de qualification', value: '78%', icon: Award, color: 'text-amber-500' },
-    { label: 'Taux de conversion', value: '29.5%', icon: TrendingUp, color: 'text-emerald-600' },
-    { label: 'Temps moyen de réponse IA', value: '4.2 secondes', icon: Clock, color: 'text-indigo-400' },
+    { label: 'Conversations reçues', value: stats.conversations.toString(), icon: MessageSquare, color: 'text-blue-500' },
+    { label: 'Messages échangés', value: stats.messages.toString(), icon: TrendingUp, color: 'text-emerald-500' },
+    { label: 'Total prospects', value: stats.contacts.toString(), icon: Users, color: 'text-indigo-500' },
+    { label: 'Prospects qualifiés IA', value: stats.qualified.toString(), icon: Award, color: 'text-purple-500' },
+    { label: 'Clients / Conversions', value: stats.clients.toString(), icon: DollarSign, color: 'text-emerald-400' },
+    { label: 'Taux de qualification', value: stats.qualificationRate, icon: Award, color: 'text-amber-500' },
+    { label: 'Taux de conversion', value: stats.conversionRate, icon: TrendingUp, color: 'text-emerald-600' },
+    { label: 'Temps de réponse IA', value: '< 10 secondes', icon: Clock, color: 'text-indigo-400' },
   ];
 
   return (
@@ -22,10 +56,10 @@ export default function Analytics() {
         <div>
           <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center space-x-2">
             <BarChart3 className="w-5 h-5 text-emerald-500" />
-            <span>Analytics & Performance IA</span>
+            <span>Analytics & Performance Réelle IA</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Statistiques de vente, taux de conversion et réactivité de votre commercial IA WhatsApp.
+            Indicateurs mesurés à partir des conversations et prospects réels de {business?.name || 'votre compte'}.
           </p>
         </div>
 
@@ -58,48 +92,44 @@ export default function Analytics() {
         </div>
       </div>
 
+      {loading && (
+        <div className="text-center py-12">
+          <RefreshCw className="w-6 h-6 animate-spin text-emerald-500 mx-auto mb-2" />
+          <p className="text-xs text-slate-500">Calcul des indicateurs réels...</p>
+        </div>
+      )}
+
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {metrics.map((m, idx) => {
-          const Icon = m.icon;
-          return (
-            <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:border-emerald-500/40 transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold text-slate-500">{m.label}</span>
-                <Icon className={`w-4 h-4 ${m.color}`} />
+      {!loading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {metrics.map((m, idx) => {
+            const Icon = m.icon;
+            return (
+              <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:border-emerald-500/40 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-semibold text-slate-500">{m.label}</span>
+                  <Icon className={`w-4 h-4 ${m.color}`} />
+                </div>
+                <span className="text-xl font-extrabold text-slate-900 tracking-tight">{m.value}</span>
               </div>
-              <span className="text-xl font-extrabold text-slate-900 tracking-tight">{m.value}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Chart Visual Simulation */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-        <h3 className="font-extrabold text-sm text-slate-900">Évolution des conversations & qualifications</h3>
-        
-        <div className="h-48 flex items-end justify-between gap-2 pt-6 border-b border-slate-100 pb-2">
-          {[40, 65, 80, 55, 90, 75, 95].map((h, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-2">
-              <div className="w-full max-w-[36px] bg-emerald-500/20 rounded-t-lg relative group overflow-hidden" style={{ height: `${h}%` }}>
-                <div className="w-full bg-emerald-500 rounded-t-lg absolute bottom-0 transition-all duration-500" style={{ height: `${h * 0.7}%` }} />
-              </div>
-              <span className="text-[10px] text-slate-400 font-medium">Jour {i + 1}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      )}
 
-        <div className="flex items-center justify-center space-x-6 text-xs text-slate-600 pt-2">
-          <span className="flex items-center space-x-2">
-            <span className="w-3 h-3 rounded-sm bg-emerald-500/20 border border-emerald-500" />
-            <span>Conversations totales</span>
-          </span>
-          <span className="flex items-center space-x-2">
-            <span className="w-3 h-3 rounded-sm bg-emerald-500" />
-            <span>Prospects qualifiés</span>
-          </span>
+      {/* Real summary card */}
+      {!loading && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+          <h3 className="font-extrabold text-sm text-slate-900">Synthèse de performance</h3>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            {stats.conversations === 0 ? (
+              "Aucune donnée d'interaction enregistrée sur cette période. Dès que votre numéro WhatsApp sera connecté, les métriques d'acquisition et de conversion se mettront à jour automatiquement."
+            ) : (
+              `Sur cette période, votre commercial IA a géré ${stats.conversations} conversation(s) et qualifié ${stats.qualified} prospect(s) avec un taux de réussite de ${stats.qualificationRate}.`
+            )}
+          </p>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -1,14 +1,58 @@
-import React, { useState } from 'react';
-import { Zap, Clock, UserCheck, AlertTriangle, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Zap, Clock, UserCheck, AlertTriangle, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
+import { getAutomations, updateAutomation } from '../lib/supabaseClient';
 
-export default function Automations({ state, onUpdateState }) {
-  const [automations, setAutomations] = useState([...state.automations]);
+export default function Automations() {
+  const { business } = useAuth();
 
-  const toggleAutomation = (id) => {
-    const updated = automations.map(a => a.id === id ? { ...a, isEnabled: !a.isEnabled } : a);
-    setAutomations(updated);
-    onUpdateState({ automations: updated });
+  const [automations, setAutomations] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    if (!business?.id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const data = await getAutomations(business.id);
+      setAutomations(data);
+    } catch (err) {
+      console.error('Error fetching automations:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [business?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const toggleAutomation = async (id) => {
+    const auto = automations.find(a => a.id === id);
+    if (!auto) return;
+
+    const nextState = !auto.isEnabled;
+    setAutomations(prev => prev.map(a => a.id === id ? { ...a, isEnabled: nextState } : a));
+
+    try {
+      await updateAutomation(id, nextState);
+    } catch (err) {
+      console.error('Error updating automation:', err);
+      // rollback
+      setAutomations(prev => prev.map(a => a.id === id ? { ...a, isEnabled: !nextState } : a));
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="text-center py-20 bg-white rounded-2xl border border-slate-200">
+        <RefreshCw className="w-8 h-8 animate-spin text-emerald-500 mx-auto mb-3" />
+        <p className="text-sm font-semibold text-slate-700">Chargement de vos automatisations...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -20,140 +64,40 @@ export default function Automations({ state, onUpdateState }) {
             <span>Automatisations & Scénarios WhatsApp</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Gérez la réactivité de votre commercial IA, les relances automatiques et les alertes d'intervention humaine.
+            Gérez la réactivité de votre commercial IA, les relances automatiques et les alertes d'intervention humaine pour {business?.name || 'votre compte'}.
           </p>
         </div>
       </div>
 
       {/* Automations List */}
       <div className="space-y-4">
-        {/* Auto 1 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2">
-              <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-xs">Auto 1</span>
-              <h3 className="font-extrabold text-sm text-slate-900">Réponse instantanée IA</h3>
-            </div>
-            <p className="text-xs text-slate-600">
-              <strong>Quand :</strong> Nouveau message WhatsApp entrant <br />
-              <strong>Alors :</strong> L'assistant IA Awa répond immédiatement en moins de 10 secondes.
-            </p>
-          </div>
-
-          <button
-            onClick={() => toggleAutomation('auto_1')}
-            className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${
-              automations.find(a => a.id === 'auto_1')?.isEnabled ? 'bg-emerald-500' : 'bg-slate-300'
-            }`}
-          >
-            <span className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-              automations.find(a => a.id === 'auto_1')?.isEnabled ? 'left-6' : 'left-0.5'
-            }`} />
-          </button>
-        </div>
-
-        {/* Auto 2 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2">
-              <span className="p-1.5 rounded-lg bg-blue-100 text-blue-800 font-bold text-xs">Auto 2</span>
-              <h3 className="font-extrabold text-sm text-slate-900">Qualification automatique des leads</h3>
-            </div>
-            <p className="text-xs text-slate-600">
-              <strong>Quand :</strong> Le prospect répond aux questions <br />
-              <strong>Alors :</strong> L'IA extrait le besoin, le budget et le produit d'intérêt, puis met à jour le score (0-100).
-            </p>
-          </div>
-
-          <button
-            onClick={() => toggleAutomation('auto_2')}
-            className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${
-              automations.find(a => a.id === 'auto_2')?.isEnabled ? 'bg-emerald-500' : 'bg-slate-300'
-            }`}
-          >
-            <span className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-              automations.find(a => a.id === 'auto_2')?.isEnabled ? 'left-6' : 'left-0.5'
-            }`} />
-          </button>
-        </div>
-
-        {/* Auto 3 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
-          <div className="flex items-start justify-between gap-4">
+        {automations.map((auto, idx) => (
+          <div key={auto.id} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-start justify-between gap-4 hover:border-emerald-500/40 transition-all">
             <div className="space-y-1">
               <div className="flex items-center space-x-2">
-                <span className="p-1.5 rounded-lg bg-amber-100 text-amber-800 font-bold text-xs">Auto 3</span>
-                <h3 className="font-extrabold text-sm text-slate-900">Relance automatique des prospects inactifs</h3>
+                <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-xs">
+                  Auto {idx + 1}
+                </span>
+                <h3 className="font-extrabold text-sm text-slate-900">{auto.name}</h3>
               </div>
-              <p className="text-xs text-slate-600">
-                <strong>Si :</strong> Le prospect ne répond pas pendant <strong>6 heures</strong> <br />
-                <strong>Alors :</strong> Envoyer un message de relance personnalisé par l'IA.
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {auto.description || "Gère la réactivité et les actions automatiques de votre commercial IA WhatsApp."}
               </p>
             </div>
 
             <button
-              onClick={() => toggleAutomation('auto_3')}
+              type="button"
+              onClick={() => toggleAutomation(auto.id)}
               className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${
-                automations.find(a => a.id === 'auto_3')?.isEnabled ? 'bg-emerald-500' : 'bg-slate-300'
+                auto.isEnabled ? 'bg-emerald-500' : 'bg-slate-300'
               }`}
             >
               <span className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-                automations.find(a => a.id === 'auto_3')?.isEnabled ? 'left-6' : 'left-0.5'
+                auto.isEnabled ? 'left-6' : 'left-0.5'
               }`} />
             </button>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 text-xs">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-500 mb-1">Délai avant relance</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-                <option>6 heures</option>
-                <option>12 heures</option>
-                <option>24 heures</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-500 mb-1">Nombre max de relances</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-                <option>1 relance</option>
-                <option>2 relances</option>
-                <option>3 relances</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-500 mb-1">Type de message</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-                <option>Généré par IA</option>
-                <option>Modèle personnalisé</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Auto 4 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2">
-              <span className="p-1.5 rounded-lg bg-rose-100 text-rose-800 font-bold text-xs">Auto 4</span>
-              <h3 className="font-extrabold text-sm text-slate-900">Passage de main humain (Alerte)</h3>
-            </div>
-            <p className="text-xs text-slate-600">
-              <strong>Si :</strong> Le prospect demande un humain OU pose une question inconnue <br />
-              <strong>Alors :</strong> Désactiver l'IA temporairement pour ce chat et notifier l'utilisateur.
-            </p>
-          </div>
-
-          <button
-            onClick={() => toggleAutomation('auto_4')}
-            className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${
-              automations.find(a => a.id === 'auto_4')?.isEnabled ? 'bg-emerald-500' : 'bg-slate-300'
-            }`}
-          >
-            <span className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
-              automations.find(a => a.id === 'auto_4')?.isEnabled ? 'left-6' : 'left-0.5'
-            }`} />
-          </button>
-        </div>
+        ))}
       </div>
     </div>
   );

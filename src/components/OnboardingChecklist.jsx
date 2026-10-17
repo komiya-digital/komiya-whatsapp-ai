@@ -21,7 +21,7 @@ export default function OnboardingChecklist({
       label: 'Assistant IA configuré',
       completed: isAgentConfigured,
       actionTab: 'assistant',
-      buttonText: 'Configurer Awa'
+      buttonText: 'Configurer votre IA'
     },
     {
       id: 'products',

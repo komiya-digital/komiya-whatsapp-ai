@@ -1,16 +1,22 @@
-import React, { useState } from 'react';
-import { Package, Plus, Trash2, Edit, CheckCircle2, HelpCircle, Sparkles, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Package, Plus, Trash2, Edit, CheckCircle2, HelpCircle, Sparkles, X, RefreshCw } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
+import { getProducts, createProduct, updateProduct, deleteProduct } from '../lib/supabaseClient';
 
-export default function Products({ state, onUpdateState }) {
-  const [products, setProducts] = useState([...state.products]);
+export default function Products() {
+  const { business } = useAuth();
+
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
     description: '',
     price: '',
-    currency: 'FCFA',
+    currency: business?.currency || 'FCFA',
     category: 'Général',
     isAvailable: true,
     salesArguments: '',
@@ -19,13 +25,33 @@ export default function Products({ state, onUpdateState }) {
     faqAnswer: ''
   });
 
+  const loadData = useCallback(async () => {
+    if (!business?.id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const data = await getProducts(business.id);
+      setProducts(data);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [business?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
   const handleOpenAdd = () => {
     setEditingId(null);
     setForm({
       name: '',
       description: '',
       price: '',
-      currency: 'FCFA',
+      currency: business?.currency || 'FCFA',
       category: 'Général',
       isAvailable: true,
       salesArguments: '',
@@ -42,7 +68,7 @@ export default function Products({ state, onUpdateState }) {
       name: p.name,
       description: p.description,
       price: p.price,
-      currency: p.currency || 'FCFA',
+      currency: p.currency || business?.currency || 'FCFA',
       category: p.category || 'Général',
       isAvailable: p.isAvailable,
       salesArguments: (p.salesArguments || []).join('\n'),
@@ -53,50 +79,58 @@ export default function Products({ state, onUpdateState }) {
     setShowModal(true);
   };
 
-  const handleDelete = (id) => {
-    const updated = products.filter(p => p.id !== id);
-    setProducts(updated);
-    onUpdateState({ products: updated });
+  const handleDelete = async (id) => {
+    if (!confirm('Voulez-vous vraiment supprimer ce produit ?')) return;
+    try {
+      await deleteProduct(id);
+      setProducts(prev => prev.filter(p => p.id !== id));
+    } catch (err) {
+      console.error('Error deleting product:', err);
+      alert('Erreur lors de la suppression.');
+    }
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
+    if (!business?.id) return;
+
+    setSaving(true);
     const argsArray = form.salesArguments.split('\n').map(s => s.trim()).filter(Boolean);
     const faqsArray = form.faqQuestion ? [{ question: form.faqQuestion, answer: form.faqAnswer }] : [];
 
-    let updated;
-    if (editingId) {
-      updated = products.map(p => p.id === editingId ? {
-        ...p,
-        name: form.name,
-        description: form.description,
-        price: Number(form.price),
-        currency: form.currency,
-        category: form.category,
-        isAvailable: form.isAvailable,
-        salesArguments: argsArray,
-        imageUrl: form.imageUrl,
-        faqs: faqsArray
-      } : p);
-    } else {
-      const newProduct = {
-        id: `prod_${Date.now()}`,
-        name: form.name,
-        description: form.description,
-        price: Number(form.price),
-        currency: form.currency,
-        category: form.category,
-        isAvailable: form.isAvailable,
-        salesArguments: argsArray,
-        imageUrl: form.imageUrl || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=500&auto=format&fit=crop&q=60',
-        faqs: faqsArray
-      };
-      updated = [...products, newProduct];
+    try {
+      if (editingId) {
+        await updateProduct(editingId, {
+          name: form.name,
+          description: form.description,
+          price: Number(form.price),
+          currency: form.currency,
+          category: form.category,
+          isAvailable: form.isAvailable,
+          salesArguments: argsArray,
+          imageUrl: form.imageUrl,
+        });
+      } else {
+        await createProduct(business.id, {
+          name: form.name,
+          description: form.description,
+          price: Number(form.price),
+          currency: form.currency,
+          category: form.category,
+          isAvailable: form.isAvailable,
+          salesArguments: argsArray,
+          imageUrl: form.imageUrl,
+          faqs: faqsArray
+        });
+      }
+      setShowModal(false);
+      await loadData();
+    } catch (err) {
+      console.error('Error saving product:', err);
+      alert('Erreur lors de l\'enregistrement du produit.');
+    } finally {
+      setSaving(false);
     }
-
-    setProducts(updated);
-    onUpdateState({ products: updated });
-    setShowModal(false);
   };
 
   return (
@@ -109,7 +143,7 @@ export default function Products({ state, onUpdateState }) {
             <span>Catalogue Produits & Services</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Gérez vos offres commerciales. L'assistant IA Awa utilise ces données exactes pour répondre aux prospects.
+            Gérez vos offres commerciales réelles. Votre commercial IA utilise ces données exactes pour répondre aux prospects.
           </p>
         </div>
 
@@ -122,80 +156,110 @@ export default function Products({ state, onUpdateState }) {
         </button>
       </div>
 
+      {/* Loading state */}
+      {loading && (
+        <div className="text-center py-12">
+          <RefreshCw className="w-6 h-6 animate-spin text-emerald-500 mx-auto mb-2" />
+          <p className="text-xs text-slate-500">Chargement de votre catalogue...</p>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && products.length === 0 && (
+        <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center shadow-sm">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4 font-bold text-xl">
+            📦
+          </div>
+          <h3 className="text-base font-bold text-slate-900 mb-1">Aucun produit dans votre catalogue</h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto mb-6 leading-relaxed">
+            Ajoutez votre premier produit ou service. L'assistant IA présentera ce produit avec son prix et ses arguments aux prospects sur WhatsApp.
+          </p>
+          <button
+            onClick={handleOpenAdd}
+            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 inline-flex items-center space-x-2"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>Ajouter mon premier produit</span>
+          </button>
+        </div>
+      )}
+
       {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {products.map((p) => (
-          <div key={p.id} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden hover:border-emerald-500/40 transition-all flex flex-col justify-between">
-            <div>
-              {p.imageUrl && (
-                <div className="h-44 w-full bg-slate-100 overflow-hidden relative">
-                  <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
-                  <span className={`absolute top-3 right-3 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                    p.isAvailable ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-white'
-                  }`}>
-                    {p.isAvailable ? 'Disponible' : 'Indisponible'}
-                  </span>
-                </div>
-              )}
-
-              <div className="p-5 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
-                      {p.category}
+      {!loading && products.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {products.map((p) => (
+            <div key={p.id} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden hover:border-emerald-500/40 transition-all flex flex-col justify-between">
+              <div>
+                {p.imageUrl && (
+                  <div className="h-44 w-full bg-slate-100 overflow-hidden relative">
+                    <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                    <span className={`absolute top-3 right-3 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                      p.isAvailable ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-white'
+                    }`}>
+                      {p.isAvailable ? 'Disponible' : 'Indisponible'}
                     </span>
-                    <h3 className="text-base font-extrabold text-slate-900 mt-1.5">{p.name}</h3>
                   </div>
-                  <span className="text-base font-extrabold text-emerald-600 whitespace-nowrap">
-                    {p.price.toLocaleString()} {p.currency}
-                  </span>
+                )}
+
+                <div className="p-5 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider">
+                        {p.category}
+                      </span>
+                      <h3 className="text-base font-extrabold text-slate-900 mt-1.5">{p.name}</h3>
+                    </div>
+                    <span className="text-base font-extrabold text-emerald-600 whitespace-nowrap">
+                      {p.price.toLocaleString()} {p.currency}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">{p.description}</p>
+
+                  {p.salesArguments?.length > 0 && (
+                    <div className="pt-2">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Arguments de vente:</span>
+                      <ul className="space-y-1">
+                        {p.salesArguments.map((arg, idx) => (
+                          <li key={idx} className="text-xs text-slate-700 flex items-center space-x-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                            <span>{arg}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {p.faqs?.length > 0 && (
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60 text-xs space-y-1">
+                      <p className="font-bold text-slate-800 flex items-center space-x-1">
+                        <HelpCircle className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>FAQ: {p.faqs[0].question}</span>
+                      </p>
+                      <p className="text-slate-600 pl-4">{p.faqs[0].answer}</p>
+                    </div>
+                  )}
                 </div>
+              </div>
 
-                <p className="text-xs text-slate-600 leading-relaxed">{p.description}</p>
-
-                {p.salesArguments?.length > 0 && (
-                  <div className="pt-2">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Arguments de vente:</span>
-                    <ul className="space-y-1">
-                      {p.salesArguments.map((arg, idx) => (
-                        <li key={idx} className="text-xs text-slate-700 flex items-center space-x-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                          <span>{arg}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {p.faqs?.length > 0 && (
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60 text-xs space-y-1">
-                    <p className="font-bold text-slate-800 flex items-center space-x-1">
-                      <HelpCircle className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>FAQ: {p.faqs[0].question}</span>
-                    </p>
-                    <p className="text-slate-600 pl-4">{p.faqs[0].answer}</p>
-                  </div>
-                )}
+              <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end space-x-2">
+                <button
+                  onClick={() => handleOpenEdit(p)}
+                  className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-lg transition-colors"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(p.id)}
+                  className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
-
-            <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end space-x-2">
-              <button
-                onClick={() => handleOpenEdit(p)}
-                className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-lg transition-colors"
-              >
-                <Edit className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handleDelete(p.id)}
-                className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* CRUD Modal */}
       {showModal && (
@@ -292,9 +356,10 @@ export default function Products({ state, onUpdateState }) {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20"
+                  disabled={saving}
+                  className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20"
                 >
-                  Enregistrer
+                  {saving ? 'Enregistrement...' : 'Enregistrer'}
                 </button>
               </div>
             </form>

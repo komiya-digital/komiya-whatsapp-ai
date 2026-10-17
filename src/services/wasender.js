@@ -12,12 +12,13 @@ const client = axios.create({
 /**
  * Send presence update (e.g. typing..., recording...)
  */
-export async function sendPresence(to, status = 'composing') {
+export async function sendPresence(to, status = 'composing', apiKey = null) {
   try {
+    const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
     await client.post('/send-presence-update', {
       to,
       status
-    });
+    }, { headers });
   } catch (error) {
     console.error('Error sending presence update:', error.response?.data || error.message);
   }
@@ -26,12 +27,13 @@ export async function sendPresence(to, status = 'composing') {
 /**
  * Send plain text message via WASenderAPI
  */
-export async function sendTextMessage(to, text) {
+export async function sendTextMessage(to, text, apiKey = null) {
   try {
+    const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
     const response = await client.post('/send-message', {
       to,
       text
-    });
+    }, { headers });
     console.log(`[WASender] Message sent to ${to}:`, response.data?.message || 'Success');
     return response.data;
   } catch (error) {
