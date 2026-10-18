@@ -295,7 +295,10 @@ CREATE POLICY "Business user can manage analytics" ON public.analytics_events FO
 -- ========================================================
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
+RETURNS trigger
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
 DECLARE
   new_biz_id UUID;
   user_full_name TEXT;
@@ -310,25 +313,29 @@ BEGIN
   ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name;
 
   -- 2. Create Business
-  INSERT INTO public.businesses (owner_id, name, country, currency, onboarding_completed)
-  VALUES (new.id, user_company_name, 'Côte d''Ivoire', 'FCFA', FALSE)
+  INSERT INTO public.businesses (id, owner_id, name, country, currency, onboarding_completed)
+  VALUES (gen_random_uuid(), new.id, user_company_name, 'Côte d''Ivoire', 'FCFA', FALSE)
   RETURNING id INTO new_biz_id;
 
   -- 3. Create Default AI Agent
-  INSERT INTO public.ai_agents (business_id, name, company_description, country, tone, objective)
-  VALUES (new_biz_id, 'Awa', user_company_name, 'Côte d''Ivoire', 'Professionnel', 'Vendre + qualifier');
+  INSERT INTO public.ai_agents (id, business_id, name, company_description, country, tone, objective)
+  VALUES (gen_random_uuid(), new_biz_id, 'Awa', user_company_name, 'Côte d''Ivoire', 'Professionnel', 'Vendre + qualifier');
 
   -- 4. Create Default Automations
-  INSERT INTO public.automations (business_id, name, trigger_type, is_enabled, settings_json)
+  INSERT INTO public.automations (id, business_id, name, trigger_type, is_enabled, settings_json)
   VALUES
-    (new_biz_id, 'Réponse instantanée IA', 'instant_reply', true, '{"description":"L''IA répond en moins de 10 secondes aux nouveaux messages entrants."}'::jsonb),
-    (new_biz_id, 'Qualification automatique', 'qualification', true, '{"description":"Extrait le besoin, le budget et le produit d''intérêt pendant l''échange."}'::jsonb),
-    (new_biz_id, 'Relance après 6h', 'follow_up', true, '{"description":"Envoie un message de relance personnalisé si le prospect ne répond plus."}'::jsonb),
-    (new_biz_id, 'Passage de main humain', 'human_handover', true, '{"description":"Désactive l''IA et alerte le propriétaire si un humain est demandé."}'::jsonb);
+    (gen_random_uuid(), new_biz_id, 'Réponse instantanée IA', 'instant_reply', true, '{"description":"L''IA répond en moins de 10 secondes aux nouveaux messages entrants."}'::jsonb),
+    (gen_random_uuid(), new_biz_id, 'Qualification automatique', 'qualification', true, '{"description":"Extrait le besoin, le budget et le produit d''intérêt pendant l''échange."}'::jsonb),
+    (gen_random_uuid(), new_biz_id, 'Relance après 6h', 'follow_up', true, '{"description":"Envoie un message de relance personnalisé si le prospect ne répond plus."}'::jsonb),
+    (gen_random_uuid(), new_biz_id, 'Passage de main humain', 'human_handover', true, '{"description":"Désactive l''IA et alerte le propriétaire si un humain est demandé."}'::jsonb);
 
   RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Catch any error so auth.users insert is never blocked
+  RAISE WARNING 'handle_new_user non-blocking exception: %', SQLERRM;
+  RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql;
 
 -- Trigger execution on auth.users insert
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;

@@ -1,9 +1,17 @@
-﻿services:
+services:
   - type: web
     name: komiya-whatsapp-ai
     runtime: node
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: VITE_SUPABASE_URL
+        value: https://glbbwuyznvuybyredtvq.supabase.co
+      - key: VITE_SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdsYmJ3dXl6bnZ1eWJ5cmVkdHZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MjU4NjIsImV4cCI6MjEwNTQwMTg2Mn0.h_D3gDBwMZTGiGGChj55TAAl_t2360l1cewKO91khy8
+      - key: SUPABASE_URL
+        value: https://glbbwuyznvuybyredtvq.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdsYmJ3dXl6bnZ1eWJ5cmVkdHZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MjU4NjIsImV4cCI6MjEwNTQwMTg2Mn0.h_D3gDBwMZTGiGGChj55TAAl_t2360l1cewKO91khy8

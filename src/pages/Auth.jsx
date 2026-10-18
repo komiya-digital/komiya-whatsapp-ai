@@ -102,8 +102,12 @@ export default function Auth({ initialMode = 'login', onNavigate }) {
         await signIn(email.trim(), password);
         if (onNavigate) onNavigate('dashboard');
       } else if (mode === 'register') {
-        await signUp(email.trim(), password, fullName.trim(), companyName.trim() || `${fullName.trim()}'s Business`);
-        if (onNavigate) onNavigate('dashboard');
+        const result = await signUp(email.trim(), password, fullName.trim(), companyName.trim() || `${fullName.trim()}'s Business`);
+        if (result?.session) {
+          if (onNavigate) onNavigate('dashboard');
+        } else {
+          setSuccessMessage('Compte créé avec succès ! Si un email de confirmation est requis, veuillez vérifier votre boîte de réception.');
+        }
       } else if (mode === 'forgot') {
         await forgotPassword(email.trim());
         setSuccessMessage(`Un lien de réinitialisation a été envoyé à ${email}. Vérifiez votre boîte de réception.`);
@@ -121,6 +125,10 @@ export default function Auth({ initialMode = 'login', onNavigate }) {
         userFriendlyMsg = 'Un compte existe déjà avec cette adresse email.';
       } else if (userFriendlyMsg.includes('Password should be at least')) {
         userFriendlyMsg = 'Le mot de passe doit comporter au moins 6 caractères.';
+      } else if (userFriendlyMsg.includes('Database error saving new user')) {
+        userFriendlyMsg = 'Erreur lors de la création du compte sur la base de données Supabase. Veuillez vérifier les triggers sur auth.users.';
+      } else if (userFriendlyMsg.includes('Failed to fetch')) {
+        userFriendlyMsg = 'Impossible de contacter le serveur d\'authentification. Veuillez vérifier votre connexion ou l\'accès à Supabase.';
       }
       setErrorMessage(userFriendlyMsg);
     } finally {
