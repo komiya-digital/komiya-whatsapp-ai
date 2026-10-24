@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import Sidebar from './components/layout/Sidebar';
 import Auth from './pages/Auth';
+import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
 import WhatsAppSetup from './pages/WhatsAppSetup';
 import AIAssistant from './pages/AIAssistant';
@@ -16,7 +17,7 @@ import { Menu, Sparkles, RefreshCw } from 'lucide-react';
 
 function normalizePath(pathname) {
   const clean = (pathname || '').replace(/\/+$/, '').toLowerCase();
-  if (!clean || clean === '') return '/dashboard';
+  if (!clean || clean === '') return '/';
   return clean;
 }
 
@@ -63,15 +64,19 @@ function MainApp() {
   useEffect(() => {
     if (loading) return;
 
-    const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password'];
-    const isPublic = publicPaths.includes(currentPath);
+    const authOnlyPaths = ['/login', '/register', '/forgot-password', '/reset-password'];
+    const isAuthOnly = authOnlyPaths.includes(currentPath);
 
-    if (!isAuthenticated && !isPublic) {
-      // Redirect unauthenticated user to /login without flash
-      window.history.replaceState(null, '', '/login');
-      setCurrentPath('/login');
-    } else if (isAuthenticated && isPublic) {
-      // Redirect logged-in user to /dashboard
+    if (!isAuthenticated) {
+      // '/' is the public landing page, and authOnlyPaths are the public auth pages
+      const isPublic = currentPath === '/' || isAuthOnly;
+      if (!isPublic) {
+        // Redirect unauthenticated user trying to access /dashboard or any protected route
+        window.history.replaceState(null, '', '/login');
+        setCurrentPath('/login');
+      }
+    } else if (isAuthenticated && isAuthOnly) {
+      // Redirect logged-in user away from /login and /register to /dashboard
       window.history.replaceState(null, '', '/dashboard');
       setCurrentPath('/dashboard');
     }
@@ -94,7 +99,17 @@ function MainApp() {
     );
   }
 
-  // 2. Unauthenticated Routes
+  // 2. Public Landing Page at root '/'
+  if (currentPath === '/') {
+    return (
+      <LandingPage 
+        onNavigate={navigate} 
+        isAuthenticated={isAuthenticated} 
+      />
+    );
+  }
+
+  // 3. Unauthenticated Routes
   if (!isAuthenticated) {
     let mode = 'login';
     if (currentPath === '/register') mode = 'register';

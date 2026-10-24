@@ -145,12 +145,30 @@ export default function Auth({ initialMode = 'login', onNavigate }) {
       {/* Main Card */}
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10">
         
+        {/* Back to Landing Page link */}
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => onNavigate && onNavigate('/')}
+            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-emerald-400 font-semibold transition-colors group"
+          >
+            <span className="transition-transform group-hover:-translate-x-1">←</span>
+            <span>Retour au site Komiya</span>
+          </button>
+        </div>
+
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-emerald-400 shadow-xl shadow-emerald-500/20 mb-4">
+          <div 
+            onClick={() => onNavigate && onNavigate('/')}
+            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-emerald-400 shadow-xl shadow-emerald-500/20 mb-4 cursor-pointer hover:scale-105 transition-transform"
+          >
             <Sparkles className="w-7 h-7 text-slate-950 stroke-[2.5]" />
           </div>
-          <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center justify-center space-x-2">
+          <h1 
+            onClick={() => onNavigate && onNavigate('/')}
+            className="text-2xl font-extrabold text-white tracking-tight flex items-center justify-center space-x-2 cursor-pointer hover:text-emerald-300 transition-colors"
+          >
             <span>Komiya WhatsApp AI</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1.5 font-medium">

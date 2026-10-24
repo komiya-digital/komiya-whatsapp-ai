@@ -49,15 +49,15 @@ export default function Sidebar({ currentTab, onNavigate, isConnected, isMobileO
       `}>
         {/* Top Header & Navigation */}
         <div className="p-space-md flex flex-col gap-space-sm">
-          {/* SynapseWA Brand Logo & Header */}
+          {/* Komiya Brand Logo & Header */}
           <div className="flex items-center justify-between px-space-xs py-space-xs">
             <div className="flex items-center gap-space-sm cursor-pointer" onClick={() => onNavigate && onNavigate('dashboard')}>
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-primary-container flex items-center justify-center shadow-md shadow-primary-container/20 text-white font-extrabold text-sm tracking-tight">
-                S
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#00C896] to-[#009E75] flex items-center justify-center shadow-md shadow-[#00C896]/20 text-white font-extrabold text-sm tracking-tight">
+                K
               </div>
               <div className="flex flex-col">
-                <span className="font-bold text-base text-on-surface leading-tight tracking-tight">SynapseWA</span>
-                <span className="text-xs text-on-surface-variant font-medium">Commercial IA</span>
+                <span className="font-bold text-base text-on-surface leading-tight tracking-tight">Komiya</span>
+                <span className="text-xs text-primary font-semibold">WhatsApp AI</span>
               </div>
             </div>
             <button 

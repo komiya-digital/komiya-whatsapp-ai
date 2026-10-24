@@ -51,6 +51,15 @@ export default {
         "inverse-surface": "#213145",
         "inverse-on-surface": "#eaf1ff",
         "inverse-primary": "#3adfab",
+        // Komiya Landing Page Brand Palette
+        "komiya-green": "#00C896",
+        "komiya-green-hover": "#00B285",
+        "komiya-green-light": "#A7E7A0",
+        "komiya-green-soft": "#E6F9F3",
+        "komiya-dark": "#17211F",
+        "komiya-muted": "#66736F",
+        "komiya-surface": "#F7FAF9",
+        "komiya-border": "#E2EBE7",
       },
       spacing: {
         "space-xs": "0.25rem",
