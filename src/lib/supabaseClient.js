@@ -3,8 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 const defaultSupabaseUrl = 'https://glbbwuyznvuybyredtvq.supabase.co';
 const defaultSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdsYmJ3dXl6bnZ1eWJ5cmVkdHZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MjU4NjIsImV4cCI6MjEwNTQwMTg2Mn0.h_D3gDBwMZTGiGGChj55TAAl_t2360l1cewKO91khy8';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || defaultSupabaseUrl;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || defaultSupabaseAnonKey;
+const metaEnv = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : {};
+const procEnv = (typeof process !== 'undefined' && process.env) ? process.env : {};
+
+const supabaseUrl = metaEnv.VITE_SUPABASE_URL || procEnv.VITE_SUPABASE_URL || procEnv.SUPABASE_URL || defaultSupabaseUrl;
+const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || procEnv.VITE_SUPABASE_ANON_KEY || procEnv.SUPABASE_ANON_KEY || defaultSupabaseAnonKey;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -22,16 +25,35 @@ export async function getProfile(userId) {
     .from('profiles')
     .select('*')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
   if (error && error.code !== 'PGRST116') throw error;
   return data || null;
 }
 
 export async function upsertProfile(userId, updates) {
   if (!userId) return null;
+  const payload = {
+    id: userId,
+    ...updates,
+    updated_at: new Date().toISOString()
+  };
+
+  // 1. Try direct update first to preserve email NOT NULL constraint
+  const { data: updateData, error: updateError } = await supabase
+    .from('profiles')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+    .select()
+    .maybeSingle();
+
+  if (!updateError && updateData) {
+    return updateData;
+  }
+
+  // 2. If row does not exist yet, fallback to upsert
   const { data, error } = await supabase
     .from('profiles')
-    .upsert({ id: userId, ...updates, updated_at: new Date().toISOString() })
+    .upsert(payload)
     .select()
     .single();
   if (error) throw error;
@@ -45,7 +67,7 @@ export async function getBusiness(ownerId) {
     if (!ownerId) return null;
     const { data, error } = await supabase
       .from('businesses')
-      .select('*')
+      .select('*, whatsapp_connections(*)')
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -251,6 +273,32 @@ export async function updateContactStatus(contactId, status, score) {
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function createContact(businessId, contactData) {
+  if (!businessId) throw new Error('businessId requis pour créer un contact');
+  const payload = {
+    business_id: businessId,
+    name: contactData.name || 'Prospect WhatsApp',
+    whatsapp_number: contactData.whatsappNumber || contactData.whatsapp_number,
+    need: contactData.need || '',
+    budget: contactData.budget || '',
+    location: contactData.location || '',
+    status: contactData.status || 'Nouveau',
+    score: Number(contactData.score) || 50,
+    source: contactData.source || 'Manuel',
+    last_message: contactData.lastMessage || 'Contact créé manuellement',
+    last_interaction_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  const { data, error } = await supabase
+    .from('contacts')
+    .insert(payload)
+    .select()
+    .single();
+  if (error) throw error;
+  return formatContact(data);
 }
 
 // ─── CONVERSATIONS HELPERS ────────────────────────────────────────

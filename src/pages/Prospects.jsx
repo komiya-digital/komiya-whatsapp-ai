@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, Search, Filter, UserCheck, Phone, MapPin, DollarSign, Award, ArrowUpRight, Sparkles, RefreshCw } from 'lucide-react';
+import { Users, Search, Filter, UserCheck, Phone, MapPin, DollarSign, Award, ArrowUpRight, Sparkles, RefreshCw, UserPlus, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
-import { getContacts } from '../lib/supabaseClient';
+import { getContacts, createContact } from '../lib/supabaseClient';
 
 export default function Prospects({ onNavigate }) {
   const { business } = useAuth();
@@ -10,6 +10,19 @@ export default function Prospects({ onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+
+  // Modal creation state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [modalFeedback, setModalFeedback] = useState(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    phone_number: '',
+    need: '',
+    budget: '',
+    status: 'Nouveau',
+    score: 70
+  });
 
   const loadData = useCallback(async () => {
     if (!business?.id) {
@@ -30,6 +43,62 @@ export default function Prospects({ onNavigate }) {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Check if opened with action=new
+  useEffect(() => {
+    const checkAction = () => {
+      if (window.location.search.includes('action=new') || window.location.href.includes('action=new')) {
+        setIsModalOpen(true);
+      }
+    };
+    checkAction();
+    window.addEventListener('popstate', checkAction);
+    return () => window.removeEventListener('popstate', checkAction);
+  }, []);
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setModalFeedback(null);
+    if (window.location.search.includes('action=new') || window.location.href.includes('action=new')) {
+      window.history.replaceState(null, '', '/prospects');
+    }
+  };
+
+  const handleCreateContact = async (e) => {
+    e.preventDefault();
+    if (!business?.id) {
+      setModalFeedback({ type: 'error', message: 'Veuillez d\'abord configurer votre entreprise.' });
+      return;
+    }
+    if (!formData.phone_number.trim()) {
+      setModalFeedback({ type: 'error', message: 'Le numéro WhatsApp est obligatoire.' });
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setModalFeedback(null);
+      await createContact(business.id, formData);
+      setModalFeedback({ type: 'success', message: 'Contact créé avec succès !' });
+      await loadData();
+      setTimeout(() => {
+        closeModal();
+        setFormData({
+          name: '',
+          phone_number: '',
+          need: '',
+          budget: '',
+          status: 'Nouveau',
+          score: 70
+        });
+      }, 900);
+    } catch (err) {
+      console.error('Erreur création contact:', err);
+      setModalFeedback({ type: 'error', message: err.message || 'Impossible d\'ajouter ce prospect.' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const filteredContacts = contacts.filter(c => {
     const nameMatch = (c.name || '').toLowerCase().includes(search.toLowerCase());
@@ -73,13 +142,21 @@ export default function Prospects({ onNavigate }) {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
           <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center space-x-2">
             <UserCheck className="w-4 h-4 text-emerald-600" />
             <span className="text-xs font-bold text-emerald-800">
               {qualifiedCount} Prospect{qualifiedCount > 1 ? 's' : ''} Qualifié{qualifiedCount > 1 ? 's' : ''}
             </span>
           </div>
+
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl shadow-sm transition-all flex items-center space-x-1.5"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>+ Ajouter un contact</span>
+          </button>
         </div>
       </div>
 
@@ -227,6 +304,140 @@ export default function Prospects({ onNavigate }) {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal Ajouter un contact */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Nouveau Contact WhatsApp</h3>
+                  <p className="text-xs text-slate-500">Ajouter manuellement un prospect à votre CRM</p>
+                </div>
+              </div>
+              <button
+                onClick={closeModal}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleCreateContact} className="p-6 space-y-4">
+              {modalFeedback && (
+                <div className={`p-3 rounded-xl border flex items-center space-x-2 text-xs font-semibold ${
+                  modalFeedback.type === 'success' 
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                }`}>
+                  {modalFeedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{modalFeedback.message}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nom du prospect
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Ex: Kouamé Jean"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Numéro WhatsApp <span className="text-emerald-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={formData.phone_number}
+                  onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                  placeholder="Ex: +225 07 00 00 00 00"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Besoin / Produit recherché
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.need}
+                    onChange={(e) => setFormData({ ...formData, need: e.target.value })}
+                    placeholder="Ex: Sac en cuir marron"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Budget estimé
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.budget}
+                    onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                    placeholder="Ex: 25 000 FCFA"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Statut initial
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Nouveau">✨ Nouveau</option>
+                  <option value="En conversation">🔵 En conversation</option>
+                  <option value="Qualifié">🟢 Qualifié</option>
+                  <option value="Client">👑 Client</option>
+                  <option value="À relancer">🟠 À relancer</option>
+                </select>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20 transition-all flex items-center space-x-2"
+                >
+                  {submitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{submitting ? 'Enregistrement...' : 'Enregistrer le contact'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { getWhatsAppConnection, upsertWhatsAppConnection } from '../lib/supabaseClient';
 
 export default function WhatsAppSetup() {
-  const { business } = useAuth();
+  const { business, updateWhatsAppConnectionState } = useAuth();
 
   const [apiKey, setApiKey] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -48,7 +48,7 @@ export default function WhatsAppSetup() {
     setStatusMessage('');
 
     try {
-      await upsertWhatsAppConnection(business.id, {
+      const savedConn = await upsertWhatsAppConnection(business.id, {
         apiKey,
         phoneNumber,
         sessionId,
@@ -56,6 +56,12 @@ export default function WhatsAppSetup() {
         status: 'connected'
       });
       setIsConnected(true);
+      if (updateWhatsAppConnectionState) {
+        updateWhatsAppConnectionState({
+          ...savedConn,
+          is_connected: true
+        });
+      }
       setStatusMessage('🟢 WhatsApp connecté avec succès ! Vos conversations seront désormais synchronisées pour votre entreprise.');
     } catch (err) {
       console.error('Error saving WhatsApp connection:', err);
@@ -71,7 +77,7 @@ export default function WhatsAppSetup() {
     setStatusMessage('');
 
     try {
-      await upsertWhatsAppConnection(business.id, {
+      const savedConn = await upsertWhatsAppConnection(business.id, {
         apiKey,
         phoneNumber,
         sessionId,
@@ -79,6 +85,12 @@ export default function WhatsAppSetup() {
         status: 'disconnected'
       });
       setIsConnected(false);
+      if (updateWhatsAppConnectionState) {
+        updateWhatsAppConnectionState({
+          ...savedConn,
+          is_connected: false
+        });
+      }
       setStatusMessage('🔴 WhatsApp déconnecté.');
     } catch (err) {
       console.error('Error disconnecting WhatsApp:', err);

@@ -120,7 +120,7 @@ function MainApp() {
   }
 
   // 3. Authenticated SaaS App
-  const activeTab = currentPath.replace(/^\//, '') || 'dashboard';
+  const activeTab = currentPath.replace(/^\//, '').split('?')[0] || 'dashboard';
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex font-sans">
@@ -134,7 +134,11 @@ function MainApp() {
       <Sidebar
         currentTab={activeTab}
         onNavigate={navigate}
-        isConnected={Boolean(business?.whatsapp_connections?.[0]?.is_connected)}
+        isConnected={Boolean(
+          business?.whatsapp_connections?.[0]?.is_connected ?? 
+          business?.whatsapp_connections?.[0]?.isConnected ?? 
+          business?.whatsapp_connections?.some(w => w.is_connected || w.isConnected)
+        )}
         isMobileOpen={isMobileOpen}
         setIsMobileOpen={setIsMobileOpen}
       />
@@ -156,6 +160,11 @@ function MainApp() {
                 className="bg-transparent border-none outline-none text-xs text-on-surface placeholder:text-on-surface-variant w-full"
                 placeholder="Rechercher prospects, flux, messages..." 
                 type="text"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    navigate('prospects');
+                  }
+                }}
               />
             </div>
           </div>
@@ -176,7 +185,7 @@ function MainApp() {
                 <span className="hidden sm:inline">Tester IA</span>
               </button>
               <button 
-                onClick={() => navigate('prospects')}
+                onClick={() => navigate('prospects?action=new')}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary-container text-on-primary-container hover:bg-primary hover:text-on-primary text-xs font-bold transition-all shadow-[0_1px_2px_rgba(0,200,150,0.2)]" 
                 type="button"
               >

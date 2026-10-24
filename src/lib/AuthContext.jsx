@@ -224,16 +224,36 @@ export function AuthProvider({ children }) {
 
   const updateProfileData = async (updates) => {
     if (!user) return null;
-    const updated = await upsertProfile(user.id, updates);
-    setProfile(updated);
+    const payload = {
+      email: user.email,
+      ...updates
+    };
+    const updated = await upsertProfile(user.id, payload);
+    setProfile(prev => ({ ...prev, ...updated }));
     return updated;
   };
 
   const updateBusinessData = async (updates) => {
-    if (!business?.id) return null;
-    const updated = await updateBusiness(business.id, updates);
+    if (!user) return null;
+    let targetBiz = business;
+    if (!targetBiz?.id) {
+      targetBiz = await createBusiness(user.id, updates);
+      setBusiness(targetBiz);
+      return targetBiz;
+    }
+    const updated = await updateBusiness(targetBiz.id, updates);
     setBusiness(prev => ({ ...prev, ...updated }));
     return updated;
+  };
+
+  const updateWhatsAppConnectionState = (conn) => {
+    setBusiness(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        whatsapp_connections: [conn]
+      };
+    });
   };
 
   const completeOnboarding = async () => {
@@ -259,6 +279,7 @@ export function AuthProvider({ children }) {
     resetPassword,
     updateProfileData,
     updateBusinessData,
+    updateWhatsAppConnectionState,
     completeOnboarding,
     refreshUserData,
     setBusiness,
