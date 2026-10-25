@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, Key, Phone, RefreshCw, CheckCircle2, XCircle, Copy, Link, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { MessageSquare, Key, Phone, RefreshCw, CheckCircle2, XCircle, Copy, Link, AlertTriangle, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { getWhatsAppConnection, upsertWhatsAppConnection } from '../lib/supabaseClient';
 
-export default function WhatsAppSetup() {
-  const { business, updateWhatsAppConnectionState } = useAuth();
+export default function WhatsAppSetup({ onNavigate }) {
+  const { business, updateWhatsAppConnectionState, refreshUserData } = useAuth();
 
   const [apiKey, setApiKey] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -43,29 +43,49 @@ export default function WhatsAppSetup() {
   }, [loadData]);
 
   const handleConnect = async () => {
-    if (!business?.id) return;
+    if (!business?.id) {
+      setStatusMessage("⚠️ Données d'entreprise non trouvées. Veuillez recharger la page.");
+      return;
+    }
+
+    if (!phoneNumber.trim() && !sessionId.trim() && !apiKey.trim()) {
+      setStatusMessage("⚠️ Veuillez saisir au moins votre numéro WhatsApp et vos identifiants WASenderAPI.");
+      return;
+    }
+
     setActionLoading(true);
     setStatusMessage('');
 
     try {
+      const isNowConnected = Boolean(phoneNumber.trim() && sessionId.trim() && apiKey.trim());
       const savedConn = await upsertWhatsAppConnection(business.id, {
-        apiKey,
-        phoneNumber,
-        sessionId,
-        isConnected: true,
-        status: 'connected'
+        apiKey: apiKey.trim(),
+        phoneNumber: phoneNumber.trim(),
+        sessionId: sessionId.trim(),
+        isConnected: isNowConnected,
+        status: isNowConnected ? 'connected' : 'disconnected'
       });
-      setIsConnected(true);
+
+      setIsConnected(Boolean(savedConn.isConnected));
       if (updateWhatsAppConnectionState) {
         updateWhatsAppConnectionState({
           ...savedConn,
-          is_connected: true
+          is_connected: Boolean(savedConn.isConnected)
         });
       }
-      setStatusMessage('🟢 WhatsApp connecté avec succès ! Vos conversations seront désormais synchronisées pour votre entreprise.');
+
+      if (refreshUserData) {
+        try { await refreshUserData(); } catch (e) {}
+      }
+
+      if (isNowConnected) {
+        setStatusMessage('🟢 WhatsApp connecté avec succès ! Paramètres synchronisés pour votre entreprise.');
+      } else {
+        setStatusMessage('ℹ️ Paramètres enregistrés. Renseignez la clé API, la session et le numéro pour finaliser la connexion.');
+      }
     } catch (err) {
       console.error('Error saving WhatsApp connection:', err);
-      setStatusMessage('⚠️ Erreur lors de la sauvegarde de la connexion.');
+      setStatusMessage('⚠️ Erreur lors de la sauvegarde : ' + (err.message || 'vérifiez vos accès Supabase'));
     } finally {
       setActionLoading(false);
     }
@@ -91,9 +111,13 @@ export default function WhatsAppSetup() {
           is_connected: false
         });
       }
+      if (refreshUserData) {
+        try { await refreshUserData(); } catch (e) {}
+      }
       setStatusMessage('🔴 WhatsApp déconnecté.');
     } catch (err) {
       console.error('Error disconnecting WhatsApp:', err);
+      setStatusMessage('⚠️ Erreur lors de la déconnexion.');
     } finally {
       setActionLoading(false);
     }
@@ -151,6 +175,42 @@ export default function WhatsAppSetup() {
             : 'bg-rose-50 border-rose-200 text-rose-800'
         }`}>
           {statusMessage}
+        </div>
+      )}
+
+      {/* Onboarding Guidance Banner */}
+      {isConnected && (
+        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-xs shrink-0">
+              ✓ 1
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-900">Étape 1 validée : Session WhatsApp connectée !</p>
+              <p className="text-[11px] text-emerald-700">Vos identifiants WASenderAPI sont actifs. Passez à la configuration de l'IA.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('assistant')}
+                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-sm flex items-center space-x-1"
+              >
+                <span>Étape 2 : Assistant IA</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('dashboard')}
+                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Dashboard
+              </button>
+            )}
+          </div>
         </div>
       )}
 

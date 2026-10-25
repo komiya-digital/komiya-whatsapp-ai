@@ -27,7 +27,7 @@ export default function OnboardingChecklist({
       id: 'products',
       label: 'Premier produit ajouté',
       completed: hasProducts,
-      actionTab: 'products',
+      actionTab: 'products?action=new',
       buttonText: 'Ajouter un produit'
     },
     {

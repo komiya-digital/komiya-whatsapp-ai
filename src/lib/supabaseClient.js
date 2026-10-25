@@ -467,6 +467,8 @@ export async function getAiAgent(businessId) {
     .from('ai_agents')
     .select('*')
     .eq('business_id', businessId)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error && error.code !== 'PGRST116') throw error;
   if (!data) return null;
@@ -489,52 +491,59 @@ export async function getAiAgent(businessId) {
 export async function upsertAiAgent(businessId, agentData) {
   const existing = await getAiAgent(businessId);
   const payload = {
-    name: agentData.name || 'Awa',
-    company_description: agentData.companyDescription || agentData.company_description || '',
-    products_summary: agentData.productsSummary || agentData.products_summary || '',
-    ideal_client: agentData.idealClient || agentData.ideal_client || '',
-    country: agentData.country || 'Côte d\'Ivoire',
-    tone: agentData.tone || 'Professionnel',
-    objective: agentData.objective || 'Vendre + qualifier',
-    custom_instructions: agentData.customInstructions || agentData.custom_instructions || '',
-    is_active: agentData.isActive ?? agentData.is_active ?? true,
+    name: agentData.name || existing?.name || 'Awa',
+    company_description: agentData.companyDescription || agentData.company_description || existing?.companyDescription || '',
+    products_summary: agentData.productsSummary || agentData.products_summary || existing?.productsSummary || '',
+    ideal_client: agentData.idealClient || agentData.ideal_client || existing?.idealClient || '',
+    country: agentData.country || existing?.country || 'Côte d\'Ivoire',
+    tone: agentData.tone || existing?.tone || 'Professionnel',
+    objective: agentData.objective || existing?.objective || 'Vendre + qualifier',
+    custom_instructions: agentData.customInstructions || agentData.custom_instructions || existing?.customInstructions || '',
+    is_active: agentData.isActive ?? agentData.is_active ?? existing?.isActive ?? true,
     updated_at: new Date().toISOString()
   };
 
-  if (existing) {
+  if (existing?.id) {
     const { data, error } = await supabase
       .from('ai_agents')
       .update(payload)
-      .eq('business_id', businessId)
+      .eq('id', existing.id)
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    const res = data || { ...payload, id: existing.id, business_id: businessId };
     return {
-      ...data,
-      businessId: data.business_id,
-      companyDescription: data.company_description,
-      productsSummary: data.products_summary,
-      idealClient: data.ideal_client,
-      customInstructions: data.custom_instructions,
-      isActive: data.is_active
+      ...res,
+      id: res.id,
+      businessId: res.business_id,
+      companyDescription: res.company_description,
+      productsSummary: res.products_summary,
+      idealClient: res.ideal_client,
+      customInstructions: res.custom_instructions,
+      isActive: res.is_active
     };
   } else {
     const { data, error } = await supabase
       .from('ai_agents')
       .insert({ ...payload, business_id: businessId, created_at: new Date().toISOString() })
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    const res = data || { ...payload, business_id: businessId };
     return {
-      ...data,
-      businessId: data.business_id,
-      companyDescription: data.company_description,
-      productsSummary: data.products_summary,
-      idealClient: data.ideal_client,
-      customInstructions: data.custom_instructions,
-      isActive: data.is_active
+      ...res,
+      businessId: res.business_id,
+      companyDescription: res.company_description,
+      productsSummary: res.products_summary,
+      idealClient: res.ideal_client,
+      customInstructions: res.custom_instructions,
+      isActive: res.is_active
     };
   }
+}
+
+export async function toggleAiAgentActive(businessId, isActive) {
+  return upsertAiAgent(businessId, { isActive });
 }
 
 // ─── WHATSAPP HELPERS ─────────────────────────────────────────────
@@ -545,6 +554,8 @@ export async function getWhatsAppConnection(businessId) {
     .from('whatsapp_connections')
     .select('*')
     .eq('business_id', businessId)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error && error.code !== 'PGRST116') throw error;
   if (!data) return null;
@@ -564,45 +575,47 @@ export async function getWhatsAppConnection(businessId) {
 export async function upsertWhatsAppConnection(businessId, connectionData) {
   const existing = await getWhatsAppConnection(businessId);
   const payload = {
-    session_id: connectionData.sessionId || connectionData.session_id || '',
-    phone_number: connectionData.phoneNumber || connectionData.phone_number || '',
-    api_key: connectionData.apiKey || connectionData.api_key || '',
+    session_id: connectionData.sessionId || connectionData.session_id || existing?.sessionId || '',
+    phone_number: connectionData.phoneNumber || connectionData.phone_number || existing?.phoneNumber || '',
+    api_key: connectionData.apiKey || connectionData.api_key || existing?.apiKey || '',
     status: connectionData.status || (connectionData.isConnected ? 'connected' : 'disconnected'),
     is_connected: connectionData.isConnected ?? true,
     last_sync_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
 
-  if (existing) {
+  if (existing?.id) {
     const { data, error } = await supabase
       .from('whatsapp_connections')
       .update(payload)
-      .eq('business_id', businessId)
+      .eq('id', existing.id)
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    const res = data || { ...payload, id: existing.id, business_id: businessId };
     return {
-      ...data,
-      businessId: data.business_id,
-      sessionId: data.session_id,
-      phoneNumber: data.phone_number,
-      apiKey: data.api_key,
-      isConnected: data.is_connected
+      ...res,
+      businessId: res.business_id,
+      sessionId: res.session_id,
+      phoneNumber: res.phone_number,
+      apiKey: res.api_key,
+      isConnected: res.is_connected
     };
   } else {
     const { data, error } = await supabase
       .from('whatsapp_connections')
       .insert({ ...payload, business_id: businessId, created_at: new Date().toISOString() })
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
+    const res = data || { ...payload, business_id: businessId };
     return {
-      ...data,
-      businessId: data.business_id,
-      sessionId: data.session_id,
-      phoneNumber: data.phone_number,
-      apiKey: data.api_key,
-      isConnected: data.is_connected
+      ...res,
+      businessId: res.business_id,
+      sessionId: res.session_id,
+      phoneNumber: res.phone_number,
+      apiKey: res.api_key,
+      isConnected: res.is_connected
     };
   }
 }

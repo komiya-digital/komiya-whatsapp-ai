@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Package, Plus, Trash2, Edit, CheckCircle2, HelpCircle, Sparkles, X, RefreshCw } from 'lucide-react';
+import { Package, Plus, Trash2, Edit, CheckCircle2, HelpCircle, Sparkles, X, RefreshCw, ArrowRight, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { getProducts, createProduct, updateProduct, deleteProduct } from '../lib/supabaseClient';
 
-export default function Products() {
-  const { business } = useAuth();
+export default function Products({ onNavigate }) {
+  const { business, refreshUserData } = useAuth();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState('');
+  const [justAdded, setJustAdded] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
@@ -43,10 +45,15 @@ export default function Products() {
 
   useEffect(() => {
     loadData();
+    // Auto-open modal if navigated from onboarding checklist
+    if (window.location.search.includes('action=new') || window.location.href.includes('action=new')) {
+      handleOpenAdd();
+    }
   }, [loadData]);
 
   const handleOpenAdd = () => {
     setEditingId(null);
+    setModalError('');
     setForm({
       name: '',
       description: '',
@@ -64,6 +71,7 @@ export default function Products() {
 
   const handleOpenEdit = (p) => {
     setEditingId(p.id);
+    setModalError('');
     setForm({
       name: p.name,
       description: p.description,
@@ -84,6 +92,9 @@ export default function Products() {
     try {
       await deleteProduct(id);
       setProducts(prev => prev.filter(p => p.id !== id));
+      if (refreshUserData) {
+        try { await refreshUserData(); } catch (e) {}
+      }
     } catch (err) {
       console.error('Error deleting product:', err);
       alert('Erreur lors de la suppression.');
@@ -92,16 +103,30 @@ export default function Products() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!business?.id) return;
+    if (!business?.id) {
+      setModalError("⚠️ Données d'entreprise non trouvées. Veuillez recharger la page.");
+      return;
+    }
+
+    if (!form.name.trim()) {
+      setModalError("⚠️ Le nom du produit est requis.");
+      return;
+    }
+
+    if (!form.price || Number(form.price) < 0) {
+      setModalError("⚠️ Veuillez renseigner un prix valide.");
+      return;
+    }
 
     setSaving(true);
+    setModalError('');
     const argsArray = form.salesArguments.split('\n').map(s => s.trim()).filter(Boolean);
     const faqsArray = form.faqQuestion ? [{ question: form.faqQuestion, answer: form.faqAnswer }] : [];
 
     try {
       if (editingId) {
         await updateProduct(editingId, {
-          name: form.name,
+          name: form.name.trim(),
           description: form.description,
           price: Number(form.price),
           currency: form.currency,
@@ -109,10 +134,11 @@ export default function Products() {
           isAvailable: form.isAvailable,
           salesArguments: argsArray,
           imageUrl: form.imageUrl,
+          faqs: faqsArray
         });
       } else {
         await createProduct(business.id, {
-          name: form.name,
+          name: form.name.trim(),
           description: form.description,
           price: Number(form.price),
           currency: form.currency,
@@ -124,10 +150,14 @@ export default function Products() {
         });
       }
       setShowModal(false);
+      setJustAdded(true);
+      if (refreshUserData) {
+        try { await refreshUserData(); } catch (e) {}
+      }
       await loadData();
     } catch (err) {
       console.error('Error saving product:', err);
-      alert('Erreur lors de l\'enregistrement du produit.');
+      setModalError("⚠️ Erreur lors de l'enregistrement : " + (err.message || 'vérifiez la base Supabase'));
     } finally {
       setSaving(false);
     }
@@ -155,6 +185,42 @@ export default function Products() {
           <span>Ajouter un produit</span>
         </button>
       </div>
+
+      {/* Onboarding Guidance Banner */}
+      {(products.length > 0 || justAdded) && (
+        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-xs shrink-0">
+              ✓ 3
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-900">Étape 3 validée : Catalogue produit prêt !</p>
+              <p className="text-[11px] text-emerald-700">Vous avez {products.length} produit{products.length > 1 ? 's' : ''} configuré{products.length > 1 ? 's' : ''}. Dernière étape : activer l'IA.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('automations')}
+                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-sm flex items-center space-x-1"
+              >
+                <span>Étape 4 : Activer l'IA</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('dashboard')}
+                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Dashboard
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Loading state */}
       {loading && (
@@ -275,6 +341,12 @@ export default function Products() {
             </div>
 
             <form onSubmit={handleSave} className="space-y-3.5">
+              {modalError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center space-x-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{modalError}</span>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Nom du produit / service</label>
                 <input

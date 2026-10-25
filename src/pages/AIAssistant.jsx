@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Bot, Sparkles, Send, RefreshCw, CheckCircle2, X } from 'lucide-react';
+import { Bot, Sparkles, Send, RefreshCw, CheckCircle2, X, ArrowRight, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { getAiAgent, upsertAiAgent, getProducts } from '../lib/supabaseClient';
 
-export default function AIAssistant() {
-  const { business } = useAuth();
+export default function AIAssistant({ onNavigate }) {
+  const { business, refreshUserData } = useAuth();
 
   const [formData, setFormData] = useState({
     name: 'Awa',
@@ -19,6 +19,7 @@ export default function AIAssistant() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [showTestModal, setShowTestModal] = useState(false);
 
   // Live Test simulator state
@@ -67,16 +68,28 @@ export default function AIAssistant() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!business?.id) return;
+    if (!business?.id) {
+      setErrorMessage("⚠️ Données d'entreprise non trouvées. Veuillez recharger la page.");
+      return;
+    }
+
+    if (!formData.name?.trim()) {
+      setErrorMessage("⚠️ Le nom de l'assistant est requis.");
+      return;
+    }
 
     setSaving(true);
+    setErrorMessage('');
+
     try {
       await upsertAiAgent(business.id, formData);
       setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 3000);
+      if (refreshUserData) {
+        try { await refreshUserData(); } catch (e) {}
+      }
     } catch (err) {
       console.error('Error saving AI config:', err);
-      alert('Erreur lors de l\'enregistrement de la configuration IA.');
+      setErrorMessage("⚠️ Erreur lors de l'enregistrement de l'IA : " + (err.message || 'vérifiez vos accès Supabase'));
     } finally {
       setSaving(false);
     }
@@ -144,15 +157,71 @@ export default function AIAssistant() {
         </button>
       </div>
 
+      {errorMessage && (
+        <div className="p-4 rounded-xl text-xs font-bold bg-rose-50 border border-rose-200 text-rose-800 flex items-center space-x-2">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
       {isSaved && (
-        <div className="p-4 rounded-xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center space-x-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>Configuration de l'Assistant IA enregistrée dans Supabase avec succès !</span>
+        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-xs shrink-0">
+              ✓ 2
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-900">Étape 2 validée : Assistant IA configuré !</p>
+              <p className="text-[11px] text-emerald-700">Votre agent {formData.name || 'IA'} est enregistré. Ajoutez maintenant votre premier produit.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('products?action=new')}
+                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-sm flex items-center space-x-1"
+              >
+                <span>Étape 3 : Ajouter un produit</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('dashboard')}
+                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Dashboard
+              </button>
+            )}
+          </div>
         </div>
       )}
 
       {/* Main Configuration Form */}
       <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-5">
+        {/* Master AI Activation Switch within Assistant */}
+        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-xs font-bold text-slate-900 block">Statut du commercial IA</span>
+            <span className="text-[11px] text-slate-500 block">
+              {formData.isActive ? "🟢 L'assistant répondra automatiquement aux prospects." : "⚪ L'assistant est en pause."}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
+            className={`w-12 h-6 rounded-full transition-colors relative shrink-0 ${
+              formData.isActive ? 'bg-emerald-500' : 'bg-slate-300'
+            }`}
+          >
+            <span className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+              formData.isActive ? 'left-6' : 'left-0.5'
+            }`} />
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">Nom ou prénom de l'assistant</label>
