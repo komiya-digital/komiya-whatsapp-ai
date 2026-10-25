@@ -13,6 +13,7 @@ export default function OnboardingModal({ isOpen, onClose }) {
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [stepError, setStepError] = useState('');
 
   // Step 2 Form: Business
   const [businessName, setBusinessName] = useState(business?.name || '');
@@ -39,8 +40,20 @@ export default function OnboardingModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   const handleNext = async () => {
+    setStepError('');
+
     if (!business?.id) {
       setStep(prev => prev + 1);
+      return;
+    }
+
+    // Validation par étape
+    if (step === 2 && !businessName.trim()) {
+      setStepError("Le nom de l'entreprise est requis.");
+      return;
+    }
+    if (step === 5 && productName.trim() && !productPrice) {
+      setStepError('Le prix du produit est requis si vous renseignez un nom.');
       return;
     }
 
@@ -48,7 +61,7 @@ export default function OnboardingModal({ isOpen, onClose }) {
     try {
       if (step === 2) {
         await updateBusiness(business.id, {
-          name: businessName || business.name,
+          name: businessName.trim() || business.name,
           description,
           country,
           currency
@@ -59,7 +72,7 @@ export default function OnboardingModal({ isOpen, onClose }) {
             phoneNumber,
             sessionId,
             apiKey,
-            isConnected: Boolean(sessionId && apiKey)
+            isConnected: Boolean(sessionId && apiKey && phoneNumber)
           });
         }
       } else if (step === 4) {
@@ -86,7 +99,7 @@ export default function OnboardingModal({ isOpen, onClose }) {
       setStep(prev => prev + 1);
     } catch (err) {
       console.error('Onboarding step error:', err);
-      setStep(prev => prev + 1); // allow user to proceed
+      setStepError(err.message || 'Une erreur est survenue. Vérifiez vos données et réessayez.');
     } finally {
       setLoading(false);
     }
@@ -368,6 +381,11 @@ export default function OnboardingModal({ isOpen, onClose }) {
         </div>
 
         {/* Footer Navigation Buttons */}
+        {stepError && (
+          <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold">
+            ⚠️ {stepError}
+          </div>
+        )}
         <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
           {step > 1 && step < 6 ? (
             <button

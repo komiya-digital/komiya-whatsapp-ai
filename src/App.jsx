@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import Sidebar from './components/layout/Sidebar';
 import Auth from './pages/Auth';
@@ -22,11 +22,12 @@ function normalizePath(pathname) {
 }
 
 function MainApp() {
-  const { user, business, loading, isAuthenticated } = useAuth();
+  const { user, business, loading, isAuthenticated, refreshUserData } = useAuth();
 
   const [currentPath, setCurrentPath] = useState(() => normalizePath(window.location.pathname));
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const hasShownOnboarding = useRef(false);
 
   // Sync navigation with browser URL history
   const navigate = useCallback((target) => {
@@ -53,9 +54,10 @@ function MainApp() {
 
   // Check onboarding status when business loads
   useEffect(() => {
-    if (isAuthenticated && business) {
+    if (isAuthenticated && business && !hasShownOnboarding.current) {
       if (business.onboarding_completed === false) {
         setShowOnboarding(true);
+        hasShownOnboarding.current = true; // une seule ouverture par session
       }
     }
   }, [isAuthenticated, business]);
@@ -127,7 +129,10 @@ function MainApp() {
       {/* Onboarding Wizard for new user */}
       <OnboardingModal 
         isOpen={showOnboarding} 
-        onClose={() => setShowOnboarding(false)} 
+        onClose={async () => {
+          setShowOnboarding(false);
+          try { await refreshUserData(); } catch (e) { /* ignore */ }
+        }} 
       />
 
       {/* Responsive Sidebar - 72 (18rem) */}

@@ -34,7 +34,7 @@ export default function OnboardingChecklist({
       id: 'automations',
       label: 'IA automatique activée',
       completed: isAiActive,
-      actionTab: 'assistant',
+      actionTab: 'automations',
       buttonText: 'Activer l\'IA'
     }
   ];

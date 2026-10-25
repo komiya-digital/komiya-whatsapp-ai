@@ -41,7 +41,7 @@ export default function Dashboard({ onNavigate }) {
   const [whatsappConnected, setWhatsappConnected] = useState(false);
   const [isAgentConfigured, setIsAgentConfigured] = useState(false);
   const [hasProducts, setHasProducts] = useState(false);
-  const [isAiActive, setIsAiActive] = useState(true);
+  const [isAiActive, setIsAiActive] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!business?.id) {
@@ -60,7 +60,7 @@ export default function Dashboard({ onNavigate }) {
       if (statsData) setStats(statsData);
       setWhatsappConnected(Boolean(waConn?.isConnected));
       setIsAgentConfigured(Boolean(agentData?.companyDescription || agentData?.name));
-      setIsAiActive(Boolean(agentData?.isActive ?? true));
+      setIsAiActive(Boolean(agentData?.isActive && Boolean(agentData?.companyDescription || agentData?.customInstructions)));
       setHasProducts(Array.isArray(productsList) && productsList.length > 0);
     } catch (e) {
       console.warn('Dashboard load error:', e);
