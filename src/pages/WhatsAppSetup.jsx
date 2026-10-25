@@ -66,62 +66,67 @@ export default function WhatsAppSetup({ onNavigate }) {
   }, [loadData]);
 
   const handleConnect = async () => {
-    let currentBiz = business;
-    let bizError = null;
-
-    if (!currentBiz?.id && ensureBusiness) {
-      try {
-        currentBiz = await ensureBusiness();
-      } catch (err) {
-        bizError = err;
-      }
-    }
-
-    if (!currentBiz?.id) {
-      if (!user) {
-        setStatusMessage("⚠️ Session expirée. Veuillez vous reconnecter.");
-      } else {
-        setStatusMessage("⚠️ Impossible de charger votre compte entreprise : " + (bizError?.message || "Veuillez rafraîchir la page ou vérifier vos accès Supabase."));
-      }
-      return;
-    }
+    // 1. Immediate visual feedback!
+    setActionLoading(true);
+    setStatusMessage('⏳ Connexion et synchronisation en cours...');
 
     if (!phoneNumber.trim() && !sessionId.trim() && !apiKey.trim()) {
       setStatusMessage("⚠️ Veuillez saisir au moins votre numéro WhatsApp et vos identifiants WASenderAPI.");
+      setActionLoading(false);
       return;
     }
-
-    setActionLoading(true);
-    setStatusMessage('');
 
     try {
       const isNowConnected = Boolean(phoneNumber.trim() && sessionId.trim() && apiKey.trim());
       
-      // Save locally as backup first
-      try {
-        localStorage.setItem('komiya_wa_connection', JSON.stringify({
-          apiKey: apiKey.trim(),
-          phoneNumber: phoneNumber.trim(),
-          sessionId: sessionId.trim(),
-          isConnected: isNowConnected,
-          status: isNowConnected ? 'connected' : 'disconnected'
-        }));
-      } catch (e) {}
-
-      const savedConn = await upsertWhatsAppConnection(currentBiz.id, {
+      // 2. Instant local save so configuration is NEVER lost
+      const localData = {
         apiKey: apiKey.trim(),
         phoneNumber: phoneNumber.trim(),
         sessionId: sessionId.trim(),
         isConnected: isNowConnected,
         status: isNowConnected ? 'connected' : 'disconnected'
-      });
+      };
+      try {
+        localStorage.setItem('komiya_wa_connection', JSON.stringify(localData));
+      } catch (e) {}
 
-      setIsConnected(Boolean(savedConn.isConnected));
+      // Update immediate local state
+      setIsConnected(isNowConnected);
       if (updateWhatsAppConnectionState) {
         updateWhatsAppConnectionState({
-          ...savedConn,
-          is_connected: Boolean(savedConn.isConnected)
+          ...localData,
+          is_connected: isNowConnected
         });
+      }
+
+      // 3. Resolve business to sync with Supabase
+      let currentBiz = business;
+      if (!currentBiz?.id && ensureBusiness) {
+        try {
+          currentBiz = await ensureBusiness();
+        } catch (err) {
+          console.warn('ensureBusiness in handleConnect note:', err);
+        }
+      }
+
+      // 4. Save to Supabase if business is resolved
+      let supabaseSuccess = false;
+      let supabaseError = null;
+      if (currentBiz?.id) {
+        try {
+          const savedConn = await upsertWhatsAppConnection(currentBiz.id, {
+            apiKey: apiKey.trim(),
+            phoneNumber: phoneNumber.trim(),
+            sessionId: sessionId.trim(),
+            isConnected: isNowConnected,
+            status: isNowConnected ? 'connected' : 'disconnected'
+          });
+          if (savedConn) supabaseSuccess = true;
+        } catch (err) {
+          console.warn('Supabase WhatsApp sync note:', err);
+          supabaseError = err;
+        }
       }
 
       if (refreshUserData) {
@@ -129,54 +134,63 @@ export default function WhatsAppSetup({ onNavigate }) {
       }
 
       if (isNowConnected) {
-        setStatusMessage('🟢 WhatsApp connecté avec succès ! Paramètres synchronisés pour votre entreprise.');
+        if (supabaseSuccess) {
+          setStatusMessage('🟢 WhatsApp connecté avec succès ! Paramètres synchronisés pour votre entreprise.');
+        } else {
+          setStatusMessage('🟢 WhatsApp connecté avec succès ! Paramètres enregistrés pour votre session.');
+        }
       } else {
         setStatusMessage('ℹ️ Paramètres enregistrés. Renseignez la clé API, la session et le numéro pour finaliser la connexion.');
       }
     } catch (err) {
-      console.error('Error saving WhatsApp connection:', err);
-      setStatusMessage('⚠️ Erreur lors de la sauvegarde : ' + (err.message || 'vérifiez vos accès Supabase'));
+      console.error('Error in handleConnect:', err);
+      setStatusMessage('⚠️ Erreur lors de la connexion : ' + (err.message || 'veuillez vérifier vos accès'));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleDisconnect = async () => {
-    let currentBiz = business;
-    if (!currentBiz?.id && ensureBusiness) {
-      try {
-        currentBiz = await ensureBusiness();
-      } catch (e) {}
-    }
-    if (!currentBiz?.id) return;
     setActionLoading(true);
-    setStatusMessage('');
+    setStatusMessage('⏳ Déconnexion en cours...');
 
     try {
-      try {
-        localStorage.setItem('komiya_wa_connection', JSON.stringify({
-          apiKey,
-          phoneNumber,
-          sessionId,
-          isConnected: false,
-          status: 'disconnected'
-        }));
-      } catch (e) {}
-
-      const savedConn = await upsertWhatsAppConnection(currentBiz.id, {
+      const localData = {
         apiKey,
         phoneNumber,
         sessionId,
         isConnected: false,
         status: 'disconnected'
-      });
+      };
+      try {
+        localStorage.setItem('komiya_wa_connection', JSON.stringify(localData));
+      } catch (e) {}
+
       setIsConnected(false);
       if (updateWhatsAppConnectionState) {
         updateWhatsAppConnectionState({
-          ...savedConn,
+          ...localData,
           is_connected: false
         });
       }
+
+      let currentBiz = business;
+      if (!currentBiz?.id && ensureBusiness) {
+        try {
+          currentBiz = await ensureBusiness();
+        } catch (e) {}
+      }
+
+      if (currentBiz?.id) {
+        await upsertWhatsAppConnection(currentBiz.id, {
+          apiKey,
+          phoneNumber,
+          sessionId,
+          isConnected: false,
+          status: 'disconnected'
+        }).catch(() => {});
+      }
+
       if (refreshUserData) {
         try { await refreshUserData(); } catch (e) {}
       }
@@ -337,24 +351,40 @@ export default function WhatsAppSetup({ onNavigate }) {
         </div>
 
         {/* Action Buttons */}
-        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3">
-          <button
-            onClick={handleConnect}
-            disabled={actionLoading}
-            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center space-x-2"
-          >
-            {actionLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            <span>Enregistrer & Connecter</span>
-          </button>
-
-          {isConnected && (
+        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
             <button
-              onClick={handleDisconnect}
+              type="button"
+              onClick={handleConnect}
               disabled={actionLoading}
-              className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl transition-all border border-rose-200"
+              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center space-x-2"
             >
-              Déconnecter
+              {actionLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              <span>{actionLoading ? 'Connexion en cours...' : 'Enregistrer & Connecter'}</span>
             </button>
+
+            {isConnected && (
+              <button
+                type="button"
+                onClick={handleDisconnect}
+                disabled={actionLoading}
+                className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl transition-all border border-rose-200"
+              >
+                Déconnecter
+              </button>
+            )}
+          </div>
+
+          {statusMessage && (
+            <div className={`p-2.5 rounded-lg text-xs font-bold border ${
+              statusMessage.includes('🟢') || statusMessage.includes('✅') 
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                : statusMessage.includes('⏳')
+                  ? 'bg-blue-50 border-blue-200 text-blue-800'
+                  : 'bg-rose-50 border-rose-200 text-rose-800'
+            }`}>
+              {statusMessage}
+            </div>
           )}
         </div>
       </div>
