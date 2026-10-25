@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { getAiAgent, upsertAiAgent, getProducts } from '../lib/supabaseClient';
 
 export default function AIAssistant({ onNavigate }) {
-  const { business, ensureBusiness, refreshUserData } = useAuth();
+  const { user, business, ensureBusiness, refreshUserData } = useAuth();
 
   const [formData, setFormData] = useState({
     name: 'Awa',
@@ -31,7 +31,9 @@ export default function AIAssistant({ onNavigate }) {
   const loadData = useCallback(async () => {
     let currentBiz = business;
     if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (e) {}
     }
     if (!currentBiz?.id) {
       setLoading(false);
@@ -74,11 +76,17 @@ export default function AIAssistant({ onNavigate }) {
     e.preventDefault();
     let currentBiz = business;
     if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (e) {}
     }
 
     if (!currentBiz?.id) {
-      setErrorMessage("⚠️ Session utilisateur introuvable. Veuillez vous reconnecter.");
+      if (!user) {
+        setErrorMessage("⚠️ Session expirée. Veuillez vous reconnecter.");
+      } else {
+        setErrorMessage("⚠️ Impossible de charger votre compte entreprise. Veuillez rafraîchir la page.");
+      }
       return;
     }
 

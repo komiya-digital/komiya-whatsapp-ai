@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { getWhatsAppConnection, upsertWhatsAppConnection } from '../lib/supabaseClient';
 
 export default function WhatsAppSetup({ onNavigate }) {
-  const { business, ensureBusiness, updateWhatsAppConnectionState, refreshUserData } = useAuth();
+  const { user, business, ensureBusiness, updateWhatsAppConnectionState, refreshUserData } = useAuth();
 
   const [apiKey, setApiKey] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -18,9 +18,25 @@ export default function WhatsAppSetup({ onNavigate }) {
   const webhookUrl = `${window.location.origin}/api/webhooks/wasender`;
 
   const loadData = useCallback(async () => {
+    // 1. Instant cache recovery from localStorage
+    try {
+      const cached = localStorage.getItem('komiya_wa_connection');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.apiKey) setApiKey(parsed.apiKey);
+        if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
+        if (parsed.sessionId) setSessionId(parsed.sessionId);
+        if (parsed.isConnected !== undefined) setIsConnected(Boolean(parsed.isConnected));
+      }
+    } catch (e) {}
+
     let currentBiz = business;
     if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (e) {
+        console.warn('loadData ensureBusiness note:', e);
+      }
     }
     if (!currentBiz?.id) {
       setLoading(false);
@@ -34,6 +50,9 @@ export default function WhatsAppSetup({ onNavigate }) {
         setPhoneNumber(conn.phoneNumber || '');
         setSessionId(conn.sessionId || '');
         setIsConnected(Boolean(conn.isConnected));
+        try {
+          localStorage.setItem('komiya_wa_connection', JSON.stringify(conn));
+        } catch (e) {}
       }
     } catch (err) {
       console.error('Error loading WhatsApp connection:', err);
@@ -48,12 +67,22 @@ export default function WhatsAppSetup({ onNavigate }) {
 
   const handleConnect = async () => {
     let currentBiz = business;
+    let bizError = null;
+
     if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (err) {
+        bizError = err;
+      }
     }
 
     if (!currentBiz?.id) {
-      setStatusMessage("⚠️ Session utilisateur introuvable. Veuillez vous reconnecter.");
+      if (!user) {
+        setStatusMessage("⚠️ Session expirée. Veuillez vous reconnecter.");
+      } else {
+        setStatusMessage("⚠️ Impossible de charger votre compte entreprise : " + (bizError?.message || "Veuillez rafraîchir la page ou vérifier vos accès Supabase."));
+      }
       return;
     }
 
@@ -67,6 +96,18 @@ export default function WhatsAppSetup({ onNavigate }) {
 
     try {
       const isNowConnected = Boolean(phoneNumber.trim() && sessionId.trim() && apiKey.trim());
+      
+      // Save locally as backup first
+      try {
+        localStorage.setItem('komiya_wa_connection', JSON.stringify({
+          apiKey: apiKey.trim(),
+          phoneNumber: phoneNumber.trim(),
+          sessionId: sessionId.trim(),
+          isConnected: isNowConnected,
+          status: isNowConnected ? 'connected' : 'disconnected'
+        }));
+      } catch (e) {}
+
       const savedConn = await upsertWhatsAppConnection(currentBiz.id, {
         apiKey: apiKey.trim(),
         phoneNumber: phoneNumber.trim(),
@@ -103,13 +144,25 @@ export default function WhatsAppSetup({ onNavigate }) {
   const handleDisconnect = async () => {
     let currentBiz = business;
     if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (e) {}
     }
     if (!currentBiz?.id) return;
     setActionLoading(true);
     setStatusMessage('');
 
     try {
+      try {
+        localStorage.setItem('komiya_wa_connection', JSON.stringify({
+          apiKey,
+          phoneNumber,
+          sessionId,
+          isConnected: false,
+          status: 'disconnected'
+        }));
+      } catch (e) {}
+
       const savedConn = await upsertWhatsAppConnection(currentBiz.id, {
         apiKey,
         phoneNumber,
@@ -130,7 +183,7 @@ export default function WhatsAppSetup({ onNavigate }) {
       setStatusMessage('🔴 WhatsApp déconnecté.');
     } catch (err) {
       console.error('Error disconnecting WhatsApp:', err);
-      setStatusMessage('⚠️ Erreur lors de la déconnexion.');
+      setStatusMessage('⚠️ Erreur lors de la déconnexion : ' + (err.message || ''));
     } finally {
       setActionLoading(false);
     }

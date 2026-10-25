@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { getProducts, createProduct, updateProduct, deleteProduct } from '../lib/supabaseClient';
 
 export default function Products({ onNavigate }) {
-  const { business, ensureBusiness, refreshUserData } = useAuth();
+  const { user, business, ensureBusiness, refreshUserData } = useAuth();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -109,11 +109,17 @@ export default function Products({ onNavigate }) {
     e.preventDefault();
     let currentBiz = business;
     if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (e) {}
     }
 
     if (!currentBiz?.id) {
-      setModalError("⚠️ Session utilisateur introuvable. Veuillez vous reconnecter.");
+      if (!user) {
+        setModalError("⚠️ Session expirée. Veuillez vous reconnecter.");
+      } else {
+        setModalError("⚠️ Impossible de charger votre compte entreprise. Veuillez rafraîchir la page.");
+      }
       return;
     }
 

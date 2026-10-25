@@ -272,10 +272,28 @@ export function AuthProvider({ children }) {
       }
     }
     if (!currentUser?.id) return null;
+
+    const compName = currentUser.user_metadata?.company_name || 'Mon Entreprise';
+    const userEmail = currentUser.email || 'user@komiya.ci';
+    const userFullName = currentUser.user_metadata?.full_name || compName;
+
+    // 1. Ensure profile exists first
     try {
-      const compName = currentUser.user_metadata?.company_name || 'Mon Entreprise';
+      const prof = await upsertProfile(currentUser.id, {
+        email: userEmail,
+        full_name: userFullName,
+      });
+      if (prof) setProfile(prof);
+    } catch (e) {
+      console.warn('Profile sync in ensureBusiness note:', e.message);
+    }
+
+    // 2. Resolve business
+    try {
       const resolved = await getOrCreateBusiness(currentUser.id, {
         name: compName,
+        email: userEmail,
+        fullName: userFullName,
         country: 'Côte d\'Ivoire',
         currency: 'FCFA'
       });
@@ -284,7 +302,8 @@ export function AuthProvider({ children }) {
         return resolved;
       }
     } catch (e) {
-      console.warn('ensureBusiness note:', e);
+      console.error('ensureBusiness error:', e);
+      throw e;
     }
     return business;
   };

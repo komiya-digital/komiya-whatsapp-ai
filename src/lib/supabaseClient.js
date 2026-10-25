@@ -111,12 +111,38 @@ export async function getBusiness(ownerId) {
 export async function createBusiness(ownerId, businessData = {}) {
   if (!ownerId) throw new Error('ownerId requis pour créer une entreprise');
 
-  // Check if one already exists first
+  // 1. Check if one already exists first
   try {
     const existing = await getBusiness(ownerId);
-    if (existing) return existing;
+    if (existing?.id) return existing;
   } catch (e) {
     // continue
+  }
+
+  // 2. Ensure profile exists in public.profiles first!
+  // In Supabase schema: businesses.owner_id REFERENCES public.profiles(id)
+  try {
+    const { data: existingProf } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', ownerId)
+      .maybeSingle();
+
+    if (!existingProf) {
+      const userEmail = businessData.email || 'user@komiya.ci';
+      const userFullName = businessData.fullName || businessData.name || 'Propriétaire';
+      await supabase
+        .from('profiles')
+        .upsert({
+          id: ownerId,
+          email: userEmail,
+          full_name: userFullName,
+          role: 'owner',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+    }
+  } catch (profErr) {
+    console.warn('Profile ensure before business create note:', profErr);
   }
 
   const payload = {
@@ -146,7 +172,23 @@ export async function createBusiness(ownerId, businessData = {}) {
       .limit(1)
       .maybeSingle();
 
-    if (recovered) return recovered;
+    if (recovered?.id) return recovered;
+
+    // Retry insert without select in case select RLS policy failed
+    const { error: rawErr } = await supabase
+      .from('businesses')
+      .insert(payload);
+
+    if (!rawErr) {
+      const { data: retryFetch } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('owner_id', ownerId)
+        .limit(1)
+        .maybeSingle();
+      if (retryFetch?.id) return retryFetch;
+    }
+
     throw error;
   }
 
@@ -156,7 +198,7 @@ export async function createBusiness(ownerId, businessData = {}) {
 export async function getOrCreateBusiness(ownerId, defaultData = {}) {
   if (!ownerId) return null;
   let biz = await getBusiness(ownerId);
-  if (!biz) {
+  if (!biz?.id) {
     biz = await createBusiness(ownerId, defaultData);
   }
   return biz;
