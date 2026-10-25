@@ -59,48 +59,56 @@ export function AuthProvider({ children }) {
         if (raw) cachedBiz = JSON.parse(raw);
       } catch (e) {}
 
-      // Default business object guaranteed to exist immediately
-      const defaultBiz = cachedBiz || {
-        id: authUser.id,
-        owner_id: authUser.id,
-        name: compName,
-        country: 'Côte d\'Ivoire',
-        currency: 'FCFA',
-        onboarding_completed: false,
-        whatsapp_connections: []
-      };
+      // Check if we have a real cached business (where id != authUser.id)
+      let defaultBiz = null;
+      if (cachedBiz?.id && cachedBiz.id !== authUser.id) {
+        defaultBiz = cachedBiz;
+      } else {
+        defaultBiz = {
+          id: authUser.id,
+          owner_id: authUser.id,
+          name: compName,
+          country: 'Côte d\'Ivoire',
+          currency: 'FCFA',
+          onboarding_completed: false,
+          whatsapp_connections: []
+        };
+      }
 
-      // Set business immediately so UI and pages are NEVER blocked
+      // Set business immediately so UI is never blank
       setBusiness(defaultBiz);
-      try { localStorage.setItem(localBizKey, JSON.stringify(defaultBiz)); } catch (e) {}
 
-      // Background sync with Supabase
-      getOrCreateBusiness(authUser.id, {
-        name: compName,
-        email: authUser.email,
-        fullName: authUser.user_metadata?.full_name || compName,
-        country: 'Côte d\'Ivoire',
-        currency: 'FCFA'
-      }).then((biz) => {
-        if (biz?.id) {
-          setBusiness(biz);
-          try { localStorage.setItem(localBizKey, JSON.stringify(biz)); } catch (e) {}
+      // Resolve real business from Supabase
+      try {
+        const realBiz = await getOrCreateBusiness(authUser.id, {
+          name: compName,
+          email: authUser.email,
+          fullName: authUser.user_metadata?.full_name || compName,
+          country: 'Côte d\'Ivoire',
+          currency: 'FCFA'
+        });
+
+        if (realBiz?.id) {
+          setBusiness(realBiz);
+          try { localStorage.setItem(localBizKey, JSON.stringify(realBiz)); } catch (e) {}
 
           // Initialize default AI agent & automations in background
-          upsertAiAgent(biz.id, {
+          upsertAiAgent(realBiz.id, {
             name: 'Awa',
-            companyDescription: `${biz.name || compName} - Boutique et services`,
-            country: biz.country || 'Côte d\'Ivoire',
+            companyDescription: `${realBiz.name || compName} - Boutique et services`,
+            country: realBiz.country || 'Côte d\'Ivoire',
             tone: 'Professionnel',
             objective: 'Vendre + qualifier',
             isActive: true
           }).catch(() => {});
 
-          upsertDefaultAutomations(biz.id).catch(() => {});
+          upsertDefaultAutomations(realBiz.id).catch(() => {});
+
+          return { user: authUser, profile: prof, business: realBiz };
         }
-      }).catch((err) => {
-        console.warn('Background business sync note:', err.message);
-      });
+      } catch (bizErr) {
+        console.warn('Real business sync note in loadUserData:', bizErr.message);
+      }
 
       return { user: authUser, profile: prof, business: defaultBiz };
     } catch (err) {
@@ -284,7 +292,6 @@ export function AuthProvider({ children }) {
   };
 
   const ensureBusiness = async () => {
-    if (business?.id) return business;
     let currentUser = user;
     if (!currentUser?.id) {
       try {
@@ -295,57 +302,50 @@ export function AuthProvider({ children }) {
         console.warn('Session check in ensureBusiness failed:', e);
       }
     }
-    if (!currentUser?.id) return null;
+    if (!currentUser?.id) return business;
+
+    // If we already have a real business whose id is NOT equal to user id, return it!
+    if (business?.id && business.id !== currentUser.id) {
+      return business;
+    }
 
     const compName = currentUser.user_metadata?.company_name || 'Mon Entreprise';
     const userEmail = currentUser.email || 'user@komiya.ci';
     const userFullName = currentUser.user_metadata?.full_name || compName;
-
     const localBizKey = 'komiya_business_' + currentUser.id;
-    let localBiz = null;
+
+    // Check localStorage for a cached REAL business (where id != currentUser.id)
     try {
       const raw = localStorage.getItem(localBizKey);
-      if (raw) localBiz = JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.id && parsed.id !== currentUser.id) {
+          setBusiness(parsed);
+          return parsed;
+        }
+      }
     } catch (e) {}
 
-    const fallbackBiz = localBiz || {
-      id: currentUser.id,
-      owner_id: currentUser.id,
-      name: compName,
-      country: 'Côte d\'Ivoire',
-      currency: 'FCFA',
-      onboarding_completed: false
-    };
+    // Await the real business from Supabase
+    try {
+      const resolved = await getOrCreateBusiness(currentUser.id, {
+        name: compName,
+        email: userEmail,
+        fullName: userFullName,
+        country: 'Côte d\'Ivoire',
+        currency: 'FCFA'
+      });
 
-    // 1. Ensure profile exists first in background
-    upsertProfile(currentUser.id, {
-      email: userEmail,
-      full_name: userFullName,
-    }).then(prof => {
-      if (prof) setProfile(prof);
-    }).catch(e => {
-      console.warn('Profile sync in ensureBusiness note:', e.message);
-    });
-
-    // 2. Resolve business
-    getOrCreateBusiness(currentUser.id, {
-      name: compName,
-      email: userEmail,
-      fullName: userFullName,
-      country: 'Côte d\'Ivoire',
-      currency: 'FCFA'
-    }).then(resolved => {
       if (resolved?.id) {
         setBusiness(resolved);
         try { localStorage.setItem(localBizKey, JSON.stringify(resolved)); } catch (e) {}
+        return resolved;
       }
-    }).catch(e => {
-      console.warn('ensureBusiness background sync note:', e.message);
-    });
+    } catch (err) {
+      console.warn('ensureBusiness getOrCreateBusiness note:', err);
+    }
 
-    // Set immediate business so no page is blocked
-    setBusiness(fallbackBiz);
-    return fallbackBiz;
+    return business;
   };
 
   const value = {

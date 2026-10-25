@@ -43,8 +43,10 @@ export default function OnboardingModal({ isOpen, onClose }) {
     setStepError('');
 
     let currentBiz = business;
-    if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+    if ((!currentBiz?.id || currentBiz.id === user?.id) && ensureBusiness) {
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (e) {}
     }
 
     if (!currentBiz?.id) {
@@ -65,40 +67,75 @@ export default function OnboardingModal({ isOpen, onClose }) {
     setLoading(true);
     try {
       if (step === 2) {
-        await updateBusiness(currentBiz.id, {
-          name: businessName.trim() || currentBiz.name,
-          description,
-          country,
-          currency
-        });
+        try {
+          await updateBusiness(currentBiz.id, {
+            name: businessName.trim() || currentBiz.name,
+            description,
+            country,
+            currency
+          });
+        } catch (e) {
+          console.warn('Business update note in onboarding:', e);
+        }
       } else if (step === 3) {
         if (phoneNumber || sessionId || apiKey) {
-          await upsertWhatsAppConnection(currentBiz.id, {
+          const isConn = Boolean(sessionId && apiKey && phoneNumber);
+          const connData = {
             phoneNumber,
             sessionId,
             apiKey,
-            isConnected: Boolean(sessionId && apiKey && phoneNumber)
-          });
+            isConnected: isConn,
+            status: isConn ? 'connected' : 'disconnected'
+          };
+          // 1. Instant local persistence
+          try {
+            localStorage.setItem('komiya_wa_connection', JSON.stringify(connData));
+          } catch (e) {}
+
+          // 2. Sync to Supabase using resolved business
+          try {
+            await upsertWhatsAppConnection(currentBiz.id, connData);
+          } catch (waErr) {
+            console.warn('WhatsApp onboarding sync note:', waErr.message);
+          }
         }
       } else if (step === 4) {
-        await upsertAiAgent(currentBiz.id, {
+        const agentPayload = {
           name: agentName,
           companyDescription: description || businessName,
           country,
           tone,
           objective,
-          customInstructions
-        });
+          customInstructions,
+          isActive: true
+        };
+        try {
+          localStorage.setItem('komiya_ai_agent_' + currentBiz.id, JSON.stringify(agentPayload));
+        } catch (e) {}
+        try {
+          await upsertAiAgent(currentBiz.id, agentPayload);
+        } catch (aiErr) {
+          console.warn('AI agent onboarding sync note:', aiErr.message);
+        }
       } else if (step === 5) {
         if (productName.trim() && productPrice) {
-          await createProduct(currentBiz.id, {
+          const productPayload = {
             name: productName.trim(),
             price: Number(productPrice),
             currency,
             description: productDescription,
             category: 'Général',
             isAvailable: true
-          });
+          };
+          try {
+            const cached = JSON.parse(localStorage.getItem('komiya_products_' + currentBiz.id) || '[]');
+            localStorage.setItem('komiya_products_' + currentBiz.id, JSON.stringify([productPayload, ...cached]));
+          } catch (e) {}
+          try {
+            await createProduct(currentBiz.id, productPayload);
+          } catch (prodErr) {
+            console.warn('Product onboarding sync note:', prodErr.message);
+          }
         }
       }
       setStep(prev => prev + 1);

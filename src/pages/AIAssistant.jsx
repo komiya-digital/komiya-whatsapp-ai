@@ -104,7 +104,7 @@ export default function AIAssistant({ onNavigate }) {
     }
 
     let currentBiz = business;
-    if (!currentBiz?.id && ensureBusiness) {
+    if ((!currentBiz?.id || currentBiz.id === user?.id) && ensureBusiness) {
       try {
         currentBiz = await ensureBusiness();
       } catch (e) {}

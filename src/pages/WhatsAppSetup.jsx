@@ -102,7 +102,7 @@ export default function WhatsAppSetup({ onNavigate }) {
 
       // 3. Resolve business to sync with Supabase
       let currentBiz = business;
-      if (!currentBiz?.id && ensureBusiness) {
+      if ((!currentBiz?.id || currentBiz.id === user?.id) && ensureBusiness) {
         try {
           currentBiz = await ensureBusiness();
         } catch (err) {
@@ -175,7 +175,7 @@ export default function WhatsAppSetup({ onNavigate }) {
       }
 
       let currentBiz = business;
-      if (!currentBiz?.id && ensureBusiness) {
+      if ((!currentBiz?.id || currentBiz.id === user?.id) && ensureBusiness) {
         try {
           currentBiz = await ensureBusiness();
         } catch (e) {}

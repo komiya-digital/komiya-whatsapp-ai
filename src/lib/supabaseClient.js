@@ -216,10 +216,65 @@ export async function updateBusiness(businessId, updates) {
   return data;
 }
 
+/**
+ * Resolves the true database UUID of the business belonging to the current user.
+ * Prevents RLS violation "new row violates row-level security policy"
+ * when a caller passes user.id (owner_id) instead of businesses.id.
+ */
+export async function resolveRealBusinessId(businessId) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+    const uid = session?.user?.id;
+
+    if (!businessId) {
+      if (!uid) return null;
+      const biz = await getOrCreateBusiness(uid).catch(() => null);
+      return biz?.id || null;
+    }
+
+    // 1. If businessId matches current user's uid, it's an owner_id, not business_id
+    if (uid && businessId === uid) {
+      const biz = await getOrCreateBusiness(uid).catch(() => null);
+      if (biz?.id) return biz.id;
+    }
+
+    // 2. Check if businessId already matches a row in businesses table
+    const { data: check } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('id', businessId)
+      .maybeSingle();
+
+    if (check?.id) return check.id;
+
+    // 3. Check if businessId is an owner_id in businesses table
+    const { data: byOwner } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('owner_id', businessId)
+      .limit(1)
+      .maybeSingle();
+
+    if (byOwner?.id) return byOwner.id;
+
+    // 4. Fallback: if user is authenticated, ensure their business exists
+    if (uid) {
+      const biz = await getOrCreateBusiness(uid).catch(() => null);
+      if (biz?.id) return biz.id;
+    }
+
+    return businessId;
+  } catch (err) {
+    console.warn('resolveRealBusinessId warning:', err);
+    return businessId;
+  }
+}
+
 // ─── PRODUCTS HELPERS ─────────────────────────────────────────────
 
 export async function getProducts(businessId) {
   if (!businessId) return [];
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
   try {
     const { data, error } = await supabase
       .from('products')
@@ -227,7 +282,7 @@ export async function getProducts(businessId) {
         *,
         faqs:product_faqs(id, question, answer)
       `)
-      .eq('business_id', businessId)
+      .eq('business_id', realBizId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -256,10 +311,11 @@ export async function getProducts(businessId) {
 }
 
 export async function createProduct(businessId, product) {
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
   const { data, error } = await supabase
     .from('products')
     .insert({
-      business_id: businessId,
+      business_id: realBizId,
       name: product.name,
       description: product.description,
       price: Number(product.price) || 0,
@@ -568,10 +624,11 @@ export async function createTag(businessId, name, color = '#00C896') {
 
 export async function getAiAgent(businessId) {
   if (!businessId) return null;
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
   const { data, error } = await supabase
     .from('ai_agents')
     .select('*')
-    .eq('business_id', businessId)
+    .eq('business_id', realBizId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -594,7 +651,8 @@ export async function getAiAgent(businessId) {
 }
 
 export async function upsertAiAgent(businessId, agentData) {
-  const existing = await getAiAgent(businessId);
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
+  const existing = await getAiAgent(realBizId);
   const payload = {
     name: agentData.name || existing?.name || 'Awa',
     company_description: agentData.companyDescription || agentData.company_description || existing?.companyDescription || '',
@@ -615,8 +673,15 @@ export async function upsertAiAgent(businessId, agentData) {
       .eq('id', existing.id)
       .select()
       .maybeSingle();
-    if (error) throw error;
-    const res = data || { ...payload, id: existing.id, business_id: businessId };
+    if (error) {
+      console.warn('Update ai_agents error, retrying without select:', error.message);
+      const { error: err2 } = await supabase
+        .from('ai_agents')
+        .update(payload)
+        .eq('id', existing.id);
+      if (err2) throw err2;
+    }
+    const res = data || { ...payload, id: existing.id, business_id: realBizId };
     return {
       ...res,
       id: res.id,
@@ -630,11 +695,17 @@ export async function upsertAiAgent(businessId, agentData) {
   } else {
     const { data, error } = await supabase
       .from('ai_agents')
-      .insert({ ...payload, business_id: businessId, created_at: new Date().toISOString() })
+      .insert({ ...payload, business_id: realBizId, created_at: new Date().toISOString() })
       .select()
       .maybeSingle();
-    if (error) throw error;
-    const res = data || { ...payload, business_id: businessId };
+    if (error) {
+      console.warn('Insert ai_agents error, retrying without select:', error.message);
+      const { error: err2 } = await supabase
+        .from('ai_agents')
+        .insert({ ...payload, business_id: realBizId, created_at: new Date().toISOString() });
+      if (err2) throw err2;
+    }
+    const res = data || { ...payload, business_id: realBizId };
     return {
       ...res,
       businessId: res.business_id,
@@ -648,17 +719,19 @@ export async function upsertAiAgent(businessId, agentData) {
 }
 
 export async function toggleAiAgentActive(businessId, isActive) {
-  return upsertAiAgent(businessId, { isActive });
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
+  return upsertAiAgent(realBizId, { isActive });
 }
 
 // ─── WHATSAPP HELPERS ─────────────────────────────────────────────
 
 export async function getWhatsAppConnection(businessId) {
   if (!businessId) return null;
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
   const { data, error } = await supabase
     .from('whatsapp_connections')
     .select('*')
-    .eq('business_id', businessId)
+    .eq('business_id', realBizId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -678,7 +751,8 @@ export async function getWhatsAppConnection(businessId) {
 }
 
 export async function upsertWhatsAppConnection(businessId, connectionData) {
-  const existing = await getWhatsAppConnection(businessId);
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
+  const existing = await getWhatsAppConnection(realBizId);
   const payload = {
     session_id: connectionData.sessionId || connectionData.session_id || existing?.sessionId || '',
     phone_number: connectionData.phoneNumber || connectionData.phone_number || existing?.phoneNumber || '',
@@ -696,8 +770,15 @@ export async function upsertWhatsAppConnection(businessId, connectionData) {
       .eq('id', existing.id)
       .select()
       .maybeSingle();
-    if (error) throw error;
-    const res = data || { ...payload, id: existing.id, business_id: businessId };
+    if (error) {
+      console.warn('Update whatsapp_connections error, retrying without select:', error.message);
+      const { error: err2 } = await supabase
+        .from('whatsapp_connections')
+        .update(payload)
+        .eq('id', existing.id);
+      if (err2) throw err2;
+    }
+    const res = data || { ...payload, id: existing.id, business_id: realBizId };
     return {
       ...res,
       businessId: res.business_id,
@@ -709,11 +790,17 @@ export async function upsertWhatsAppConnection(businessId, connectionData) {
   } else {
     const { data, error } = await supabase
       .from('whatsapp_connections')
-      .insert({ ...payload, business_id: businessId, created_at: new Date().toISOString() })
+      .insert({ ...payload, business_id: realBizId, created_at: new Date().toISOString() })
       .select()
       .maybeSingle();
-    if (error) throw error;
-    const res = data || { ...payload, business_id: businessId };
+    if (error) {
+      console.warn('Insert whatsapp_connections error, retrying without select:', error.message);
+      const { error: err2 } = await supabase
+        .from('whatsapp_connections')
+        .insert({ ...payload, business_id: realBizId, created_at: new Date().toISOString() });
+      if (err2) throw err2;
+    }
+    const res = data || { ...payload, business_id: realBizId };
     return {
       ...res,
       businessId: res.business_id,
@@ -729,14 +816,15 @@ export async function upsertWhatsAppConnection(businessId, connectionData) {
 
 export async function getAutomations(businessId) {
   if (!businessId) return [];
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
   const { data, error } = await supabase
     .from('automations')
     .select('*')
-    .eq('business_id', businessId)
+    .eq('business_id', realBizId)
     .order('created_at', { ascending: true });
   if (error) throw error;
   if (!data || data.length === 0) {
-    return upsertDefaultAutomations(businessId);
+    return upsertDefaultAutomations(realBizId);
   }
   return data.map(a => ({
     id: a.id,
@@ -765,9 +853,10 @@ export async function updateAutomation(automationId, isEnabled, settingsJson) {
 
 export async function upsertDefaultAutomations(businessId) {
   if (!businessId) return [];
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
   const defaults = [
     {
-      business_id: businessId,
+      business_id: realBizId,
       name: 'Réponse instantanée IA',
       trigger_type: 'instant_reply',
       is_enabled: true,
