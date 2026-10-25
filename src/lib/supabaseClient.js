@@ -63,40 +63,103 @@ export async function upsertProfile(userId, updates) {
 // ─── BUSINESS HELPERS ─────────────────────────────────────────────
 
 export async function getBusiness(ownerId) {
+  if (!ownerId) return null;
   try {
-    if (!ownerId) return null;
+    // 1. Fetch plain business row first (never fails on relation join)
     const { data, error } = await supabase
       .from('businesses')
-      .select('*, whatsapp_connections(*)')
+      .select('*')
       .eq('owner_id', ownerId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (error && error.code !== 'PGRST116') throw error;
-    return data || null;
+
+    if (error && error.code !== 'PGRST116') {
+      console.warn('getBusiness select error:', error.message);
+      // Fallback: try querying without order
+      const { data: fallbackData } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('owner_id', ownerId)
+        .limit(1)
+        .maybeSingle();
+      if (fallbackData) return fallbackData;
+      return null;
+    }
+
+    if (!data) return null;
+
+    // 2. Fetch whatsapp_connections separately to guarantee no join error can crash getBusiness
+    try {
+      const { data: waConns } = await supabase
+        .from('whatsapp_connections')
+        .select('*')
+        .eq('business_id', data.id)
+        .order('created_at', { ascending: false });
+      data.whatsapp_connections = waConns || [];
+    } catch (e) {
+      data.whatsapp_connections = [];
+    }
+
+    return data;
   } catch (e) {
-    console.warn('getBusiness note:', e);
+    console.warn('getBusiness catch error:', e);
     return null;
   }
 }
 
-export async function createBusiness(ownerId, businessData) {
+export async function createBusiness(ownerId, businessData = {}) {
+  if (!ownerId) throw new Error('ownerId requis pour créer une entreprise');
+
+  // Check if one already exists first
+  try {
+    const existing = await getBusiness(ownerId);
+    if (existing) return existing;
+  } catch (e) {
+    // continue
+  }
+
+  const payload = {
+    owner_id: ownerId,
+    name: businessData.name || 'Mon Entreprise',
+    description: businessData.description || '',
+    country: businessData.country || 'Côte d\'Ivoire',
+    currency: businessData.currency || 'FCFA',
+    onboarding_completed: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
   const { data, error } = await supabase
     .from('businesses')
-    .insert({
-      owner_id: ownerId,
-      name: businessData.name || 'Mon Entreprise',
-      description: businessData.description || '',
-      country: businessData.country || 'Côte d\'Ivoire',
-      currency: businessData.currency || 'FCFA',
-      onboarding_completed: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
+    .insert(payload)
     .select()
-    .single();
-  if (error) throw error;
+    .maybeSingle();
+
+  if (error) {
+    console.warn('createBusiness insert note, attempting recovery:', error.message);
+    // If duplicate or conflict, fetch the existing one directly
+    const { data: recovered } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .limit(1)
+      .maybeSingle();
+
+    if (recovered) return recovered;
+    throw error;
+  }
+
   return data;
+}
+
+export async function getOrCreateBusiness(ownerId, defaultData = {}) {
+  if (!ownerId) return null;
+  let biz = await getBusiness(ownerId);
+  if (!biz) {
+    biz = await createBusiness(ownerId, defaultData);
+  }
+  return biz;
 }
 
 export async function updateBusiness(businessId, updates) {
@@ -106,7 +169,7 @@ export async function updateBusiness(businessId, updates) {
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', businessId)
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
   return data;
 }

@@ -9,7 +9,7 @@ import {
 } from '../lib/supabaseClient';
 
 export default function OnboardingModal({ isOpen, onClose }) {
-  const { business, user, completeOnboarding } = useAuth();
+  const { business, user, ensureBusiness, completeOnboarding } = useAuth();
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -42,7 +42,12 @@ export default function OnboardingModal({ isOpen, onClose }) {
   const handleNext = async () => {
     setStepError('');
 
-    if (!business?.id) {
+    let currentBiz = business;
+    if (!currentBiz?.id && ensureBusiness) {
+      currentBiz = await ensureBusiness();
+    }
+
+    if (!currentBiz?.id) {
       setStep(prev => prev + 1);
       return;
     }
@@ -60,15 +65,15 @@ export default function OnboardingModal({ isOpen, onClose }) {
     setLoading(true);
     try {
       if (step === 2) {
-        await updateBusiness(business.id, {
-          name: businessName.trim() || business.name,
+        await updateBusiness(currentBiz.id, {
+          name: businessName.trim() || currentBiz.name,
           description,
           country,
           currency
         });
       } else if (step === 3) {
         if (phoneNumber || sessionId || apiKey) {
-          await upsertWhatsAppConnection(business.id, {
+          await upsertWhatsAppConnection(currentBiz.id, {
             phoneNumber,
             sessionId,
             apiKey,
@@ -76,7 +81,7 @@ export default function OnboardingModal({ isOpen, onClose }) {
           });
         }
       } else if (step === 4) {
-        await upsertAiAgent(business.id, {
+        await upsertAiAgent(currentBiz.id, {
           name: agentName,
           companyDescription: description || businessName,
           country,
@@ -86,7 +91,7 @@ export default function OnboardingModal({ isOpen, onClose }) {
         });
       } else if (step === 5) {
         if (productName.trim() && productPrice) {
-          await createProduct(business.id, {
+          await createProduct(currentBiz.id, {
             name: productName.trim(),
             price: Number(productPrice),
             currency,

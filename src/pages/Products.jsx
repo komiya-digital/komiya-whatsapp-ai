@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { getProducts, createProduct, updateProduct, deleteProduct } from '../lib/supabaseClient';
 
 export default function Products({ onNavigate }) {
-  const { business, refreshUserData } = useAuth();
+  const { business, ensureBusiness, refreshUserData } = useAuth();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,20 +28,24 @@ export default function Products({ onNavigate }) {
   });
 
   const loadData = useCallback(async () => {
-    if (!business?.id) {
+    let currentBiz = business;
+    if (!currentBiz?.id && ensureBusiness) {
+      currentBiz = await ensureBusiness();
+    }
+    if (!currentBiz?.id) {
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
-      const data = await getProducts(business.id);
+      const data = await getProducts(currentBiz.id);
       setProducts(data);
     } catch (err) {
       console.error('Error fetching products:', err);
     } finally {
       setLoading(false);
     }
-  }, [business?.id]);
+  }, [business?.id, ensureBusiness]);
 
   useEffect(() => {
     loadData();
@@ -103,8 +107,13 @@ export default function Products({ onNavigate }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!business?.id) {
-      setModalError("⚠️ Données d'entreprise non trouvées. Veuillez recharger la page.");
+    let currentBiz = business;
+    if (!currentBiz?.id && ensureBusiness) {
+      currentBiz = await ensureBusiness();
+    }
+
+    if (!currentBiz?.id) {
+      setModalError("⚠️ Session utilisateur introuvable. Veuillez vous reconnecter.");
       return;
     }
 
@@ -137,7 +146,7 @@ export default function Products({ onNavigate }) {
           faqs: faqsArray
         });
       } else {
-        await createProduct(business.id, {
+        await createProduct(currentBiz.id, {
           name: form.name.trim(),
           description: form.description,
           price: Number(form.price),

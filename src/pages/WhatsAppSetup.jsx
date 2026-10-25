@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { getWhatsAppConnection, upsertWhatsAppConnection } from '../lib/supabaseClient';
 
 export default function WhatsAppSetup({ onNavigate }) {
-  const { business, updateWhatsAppConnectionState, refreshUserData } = useAuth();
+  const { business, ensureBusiness, updateWhatsAppConnectionState, refreshUserData } = useAuth();
 
   const [apiKey, setApiKey] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -18,13 +18,17 @@ export default function WhatsAppSetup({ onNavigate }) {
   const webhookUrl = `${window.location.origin}/api/webhooks/wasender`;
 
   const loadData = useCallback(async () => {
-    if (!business?.id) {
+    let currentBiz = business;
+    if (!currentBiz?.id && ensureBusiness) {
+      currentBiz = await ensureBusiness();
+    }
+    if (!currentBiz?.id) {
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
-      const conn = await getWhatsAppConnection(business.id);
+      const conn = await getWhatsAppConnection(currentBiz.id);
       if (conn) {
         setApiKey(conn.apiKey || '');
         setPhoneNumber(conn.phoneNumber || '');
@@ -36,15 +40,20 @@ export default function WhatsAppSetup({ onNavigate }) {
     } finally {
       setLoading(false);
     }
-  }, [business?.id]);
+  }, [business?.id, ensureBusiness]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const handleConnect = async () => {
-    if (!business?.id) {
-      setStatusMessage("⚠️ Données d'entreprise non trouvées. Veuillez recharger la page.");
+    let currentBiz = business;
+    if (!currentBiz?.id && ensureBusiness) {
+      currentBiz = await ensureBusiness();
+    }
+
+    if (!currentBiz?.id) {
+      setStatusMessage("⚠️ Session utilisateur introuvable. Veuillez vous reconnecter.");
       return;
     }
 
@@ -58,7 +67,7 @@ export default function WhatsAppSetup({ onNavigate }) {
 
     try {
       const isNowConnected = Boolean(phoneNumber.trim() && sessionId.trim() && apiKey.trim());
-      const savedConn = await upsertWhatsAppConnection(business.id, {
+      const savedConn = await upsertWhatsAppConnection(currentBiz.id, {
         apiKey: apiKey.trim(),
         phoneNumber: phoneNumber.trim(),
         sessionId: sessionId.trim(),
@@ -92,12 +101,16 @@ export default function WhatsAppSetup({ onNavigate }) {
   };
 
   const handleDisconnect = async () => {
-    if (!business?.id) return;
+    let currentBiz = business;
+    if (!currentBiz?.id && ensureBusiness) {
+      currentBiz = await ensureBusiness();
+    }
+    if (!currentBiz?.id) return;
     setActionLoading(true);
     setStatusMessage('');
 
     try {
-      const savedConn = await upsertWhatsAppConnection(business.id, {
+      const savedConn = await upsertWhatsAppConnection(currentBiz.id, {
         apiKey,
         phoneNumber,
         sessionId,

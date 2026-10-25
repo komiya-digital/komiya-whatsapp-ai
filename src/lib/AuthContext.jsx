@@ -5,6 +5,7 @@ import {
   getBusiness, 
   upsertProfile, 
   createBusiness, 
+  getOrCreateBusiness,
   updateBusiness,
   upsertAiAgent,
   upsertDefaultAutomations
@@ -49,39 +50,31 @@ export function AuthProvider({ children }) {
       }
       setProfile(prof);
 
-      // 2. Load or initialize business
+      // 2. Load or initialize business (fail-proof)
       let biz = null;
       try {
-        biz = await getBusiness(authUser.id);
-      } catch (e) {
-        console.warn('Business fetch note:', e.message);
-      }
+        const compName = authUser.user_metadata?.company_name || 'Mon Entreprise';
+        biz = await getOrCreateBusiness(authUser.id, {
+          name: compName,
+          country: 'Côte d\'Ivoire',
+          currency: 'FCFA'
+        });
 
-      if (!biz) {
-        try {
-          const compName = authUser.user_metadata?.company_name || 'Mon Entreprise';
-          biz = await createBusiness(authUser.id, {
-            name: compName,
-            country: 'Côte d\'Ivoire',
-            currency: 'FCFA'
-          });
+        // Initialize default AI agent & automations in background if new business
+        if (biz?.id) {
+          upsertAiAgent(biz.id, {
+            name: 'Awa',
+            companyDescription: `${biz.name || compName} - Boutique et services`,
+            country: biz.country || 'Côte d\'Ivoire',
+            tone: 'Professionnel',
+            objective: 'Vendre + qualifier',
+            isActive: true
+          }).catch(() => {});
 
-          // Initialize default AI agent & automations for this new business
-          if (biz?.id) {
-            await upsertAiAgent(biz.id, {
-              name: 'Awa',
-              companyDescription: `${compName} - Boutique et services`,
-              country: 'Côte d\'Ivoire',
-              tone: 'Professionnel',
-              objective: 'Vendre + qualifier',
-              isActive: true
-            }).catch(() => {});
-
-            await upsertDefaultAutomations(biz.id).catch(() => {});
-          }
-        } catch (e) {
-          console.warn('Business create note:', e.message);
+          upsertDefaultAutomations(biz.id).catch(() => {});
         }
+      } catch (e) {
+        console.warn('Business load note:', e.message);
       }
       setBusiness(biz);
 
@@ -266,6 +259,36 @@ export function AuthProvider({ children }) {
     await loadUserData(user);
   };
 
+  const ensureBusiness = async () => {
+    if (business?.id) return business;
+    let currentUser = user;
+    if (!currentUser?.id) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        currentUser = session?.user || null;
+        if (currentUser) setUser(currentUser);
+      } catch (e) {
+        console.warn('Session check in ensureBusiness failed:', e);
+      }
+    }
+    if (!currentUser?.id) return null;
+    try {
+      const compName = currentUser.user_metadata?.company_name || 'Mon Entreprise';
+      const resolved = await getOrCreateBusiness(currentUser.id, {
+        name: compName,
+        country: 'Côte d\'Ivoire',
+        currency: 'FCFA'
+      });
+      if (resolved?.id) {
+        setBusiness(resolved);
+        return resolved;
+      }
+    } catch (e) {
+      console.warn('ensureBusiness note:', e);
+    }
+    return business;
+  };
+
   const value = {
     user,
     profile,
@@ -282,6 +305,7 @@ export function AuthProvider({ children }) {
     updateWhatsAppConnectionState,
     completeOnboarding,
     refreshUserData,
+    ensureBusiness,
     setBusiness,
     setProfile,
   };

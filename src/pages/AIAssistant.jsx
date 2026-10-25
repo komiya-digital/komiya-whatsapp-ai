@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { getAiAgent, upsertAiAgent, getProducts } from '../lib/supabaseClient';
 
 export default function AIAssistant({ onNavigate }) {
-  const { business, refreshUserData } = useAuth();
+  const { business, ensureBusiness, refreshUserData } = useAuth();
 
   const [formData, setFormData] = useState({
     name: 'Awa',
@@ -29,22 +29,26 @@ export default function AIAssistant({ onNavigate }) {
   const [businessProducts, setBusinessProducts] = useState([]);
 
   const loadData = useCallback(async () => {
-    if (!business?.id) {
+    let currentBiz = business;
+    if (!currentBiz?.id && ensureBusiness) {
+      currentBiz = await ensureBusiness();
+    }
+    if (!currentBiz?.id) {
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
       const [agent, prods] = await Promise.all([
-        getAiAgent(business.id).catch(() => null),
-        getProducts(business.id).catch(() => [])
+        getAiAgent(currentBiz.id).catch(() => null),
+        getProducts(currentBiz.id).catch(() => [])
       ]);
 
       if (agent) {
         setFormData({
           name: agent.name || 'Awa',
-          country: agent.country || business.country || 'Côte d\'Ivoire',
-          companyDescription: agent.companyDescription || business.description || '',
+          country: agent.country || currentBiz.country || 'Côte d\'Ivoire',
+          companyDescription: agent.companyDescription || currentBiz.description || '',
           tone: agent.tone || 'Professionnel',
           objective: agent.objective || 'Vendre + qualifier',
           customInstructions: agent.customInstructions || '',
@@ -53,14 +57,14 @@ export default function AIAssistant({ onNavigate }) {
       }
       setBusinessProducts(prods || []);
       setTestMessages([
-        { role: 'model', text: `Bonjour ! Je suis ${agent?.name || 'Awa'}, l'assistant commercial IA de ${business.name || 'notre entreprise'}. Comment puis-je vous aider aujourd'hui ?` }
+        { role: 'model', text: `Bonjour ! Je suis ${agent?.name || 'Awa'}, l'assistant commercial IA de ${currentBiz.name || 'notre entreprise'}. Comment puis-je vous aider aujourd'hui ?` }
       ]);
     } catch (err) {
       console.error('Error fetching AI agent:', err);
     } finally {
       setLoading(false);
     }
-  }, [business?.id, business?.name, business?.country, business?.description]);
+  }, [business?.id, business?.name, business?.country, business?.description, ensureBusiness]);
 
   useEffect(() => {
     loadData();
@@ -68,8 +72,13 @@ export default function AIAssistant({ onNavigate }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!business?.id) {
-      setErrorMessage("⚠️ Données d'entreprise non trouvées. Veuillez recharger la page.");
+    let currentBiz = business;
+    if (!currentBiz?.id && ensureBusiness) {
+      currentBiz = await ensureBusiness();
+    }
+
+    if (!currentBiz?.id) {
+      setErrorMessage("⚠️ Session utilisateur introuvable. Veuillez vous reconnecter.");
       return;
     }
 
@@ -82,7 +91,7 @@ export default function AIAssistant({ onNavigate }) {
     setErrorMessage('');
 
     try {
-      await upsertAiAgent(business.id, formData);
+      await upsertAiAgent(currentBiz.id, formData);
       setIsSaved(true);
       if (refreshUserData) {
         try { await refreshUserData(); } catch (e) {}
