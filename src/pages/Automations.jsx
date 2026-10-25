@@ -4,7 +4,7 @@ import { useAuth } from '../lib/AuthContext';
 import { getAutomations, updateAutomation, getAiAgent, toggleAiAgentActive } from '../lib/supabaseClient';
 
 export default function Automations({ onNavigate }) {
-  const { business, ensureBusiness, refreshUserData } = useAuth();
+  const { user, business, ensureBusiness, refreshUserData } = useAuth();
 
   const [automations, setAutomations] = useState([]);
   const [aiAgent, setAiAgent] = useState(null);
@@ -16,17 +16,20 @@ export default function Automations({ onNavigate }) {
   const loadData = useCallback(async () => {
     let currentBiz = business;
     if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (e) {}
     }
-    if (!currentBiz?.id) {
+    const bizId = currentBiz?.id || user?.id;
+    if (!bizId) {
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
       const [autos, agent] = await Promise.all([
-        getAutomations(currentBiz.id).catch(() => []),
-        getAiAgent(currentBiz.id).catch(() => null)
+        getAutomations(bizId).catch(() => []),
+        getAiAgent(bizId).catch(() => null)
       ]);
       setAutomations(autos || []);
       setAiAgent(agent);
@@ -36,7 +39,7 @@ export default function Automations({ onNavigate }) {
     } finally {
       setLoading(false);
     }
-  }, [business?.id, ensureBusiness]);
+  }, [business?.id, ensureBusiness, user?.id]);
 
   useEffect(() => {
     loadData();
@@ -45,16 +48,19 @@ export default function Automations({ onNavigate }) {
   const handleToggleMasterAI = async () => {
     let currentBiz = business;
     if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (e) {}
     }
-    if (!currentBiz?.id) return;
+    const bizId = currentBiz?.id || user?.id;
+    if (!bizId) return;
     const nextState = !isAiMasterActive;
     setIsAiMasterActive(nextState);
     setTogglingMaster(true);
     setStatusMessage('');
 
     try {
-      await toggleAiAgentActive(currentBiz.id, nextState);
+      await toggleAiAgentActive(bizId, nextState);
       if (refreshUserData) {
         try { await refreshUserData(); } catch (e) {}
       }
@@ -95,13 +101,16 @@ export default function Automations({ onNavigate }) {
   const handleActivateAll = async () => {
     let currentBiz = business;
     if (!currentBiz?.id && ensureBusiness) {
-      currentBiz = await ensureBusiness();
+      try {
+        currentBiz = await ensureBusiness();
+      } catch (e) {}
     }
-    if (!currentBiz?.id) return;
+    const bizId = currentBiz?.id || user?.id;
+    if (!bizId) return;
     setTogglingMaster(true);
     try {
       // 1. Activate Master AI
-      await toggleAiAgentActive(currentBiz.id, true);
+      await toggleAiAgentActive(bizId, true);
       setIsAiMasterActive(true);
 
       // 2. Activate all 4 automation workflows

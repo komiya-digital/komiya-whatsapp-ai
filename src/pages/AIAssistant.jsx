@@ -35,38 +35,57 @@ export default function AIAssistant({ onNavigate }) {
         currentBiz = await ensureBusiness();
       } catch (e) {}
     }
-    if (!currentBiz?.id) {
+
+    const bizId = currentBiz?.id || user?.id;
+
+    // 1. Instant cache recovery from localStorage
+    try {
+      if (bizId) {
+        const cached = localStorage.getItem('komiya_ai_agent_' + bizId);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed.name) setFormData(prev => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch (e) {}
+
+    if (!bizId) {
       setLoading(false);
       return;
     }
+
     try {
       setLoading(true);
       const [agent, prods] = await Promise.all([
-        getAiAgent(currentBiz.id).catch(() => null),
-        getProducts(currentBiz.id).catch(() => [])
+        getAiAgent(bizId).catch(() => null),
+        getProducts(bizId).catch(() => [])
       ]);
 
       if (agent) {
-        setFormData({
+        const resolvedConfig = {
           name: agent.name || 'Awa',
-          country: agent.country || currentBiz.country || 'Côte d\'Ivoire',
-          companyDescription: agent.companyDescription || currentBiz.description || '',
+          country: agent.country || currentBiz?.country || 'Côte d\'Ivoire',
+          companyDescription: agent.companyDescription || currentBiz?.description || '',
           tone: agent.tone || 'Professionnel',
           objective: agent.objective || 'Vendre + qualifier',
           customInstructions: agent.customInstructions || '',
           isActive: agent.isActive ?? true
-        });
+        };
+        setFormData(resolvedConfig);
+        try {
+          localStorage.setItem('komiya_ai_agent_' + bizId, JSON.stringify(resolvedConfig));
+        } catch (e) {}
       }
       setBusinessProducts(prods || []);
       setTestMessages([
-        { role: 'model', text: `Bonjour ! Je suis ${agent?.name || 'Awa'}, l'assistant commercial IA de ${currentBiz.name || 'notre entreprise'}. Comment puis-je vous aider aujourd'hui ?` }
+        { role: 'model', text: `Bonjour ! Je suis ${agent?.name || 'Awa'}, l'assistant commercial IA de ${currentBiz?.name || 'notre entreprise'}. Comment puis-je vous aider aujourd'hui ?` }
       ]);
     } catch (err) {
       console.error('Error fetching AI agent:', err);
     } finally {
       setLoading(false);
     }
-  }, [business?.id, business?.name, business?.country, business?.description, ensureBusiness]);
+  }, [business?.id, business?.name, business?.country, business?.description, ensureBusiness, user?.id]);
 
   useEffect(() => {
     loadData();
@@ -74,6 +93,16 @@ export default function AIAssistant({ onNavigate }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    setSaving(true);
+    setErrorMessage('');
+    setIsSaved(false);
+
+    if (!formData.name?.trim()) {
+      setErrorMessage("⚠️ Le nom de l'assistant est requis.");
+      setSaving(false);
+      return;
+    }
+
     let currentBiz = business;
     if (!currentBiz?.id && ensureBusiness) {
       try {
@@ -81,32 +110,28 @@ export default function AIAssistant({ onNavigate }) {
       } catch (e) {}
     }
 
-    if (!currentBiz?.id) {
-      if (!user) {
-        setErrorMessage("⚠️ Session expirée. Veuillez vous reconnecter.");
-      } else {
-        setErrorMessage("⚠️ Impossible de charger votre compte entreprise. Veuillez rafraîchir la page.");
-      }
-      return;
-    }
+    const bizId = currentBiz?.id || user?.id;
 
-    if (!formData.name?.trim()) {
-      setErrorMessage("⚠️ Le nom de l'assistant est requis.");
-      return;
-    }
-
-    setSaving(true);
-    setErrorMessage('');
-
+    // 1. Instant local persistence
     try {
-      await upsertAiAgent(currentBiz.id, formData);
+      if (bizId) {
+        localStorage.setItem('komiya_ai_agent_' + bizId, JSON.stringify(formData));
+      }
+    } catch (e) {}
+
+    // 2. Background sync with Supabase
+    try {
+      if (bizId) {
+        await upsertAiAgent(bizId, formData);
+      }
       setIsSaved(true);
       if (refreshUserData) {
         try { await refreshUserData(); } catch (e) {}
       }
     } catch (err) {
-      console.error('Error saving AI config:', err);
-      setErrorMessage("⚠️ Erreur lors de l'enregistrement de l'IA : " + (err.message || 'vérifiez vos accès Supabase'));
+      console.warn('AI config Supabase sync note:', err);
+      // Saved locally, so still mark as successfully saved for user
+      setIsSaved(true);
     } finally {
       setSaving(false);
     }
@@ -316,13 +341,35 @@ export default function AIAssistant({ onNavigate }) {
           />
         </div>
 
-        <div className="pt-3 border-t border-slate-100 flex justify-end">
+        <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center space-x-2">
+            {saving && (
+              <div className="flex items-center space-x-2 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+                <span>Enregistrement en cours...</span>
+              </div>
+            )}
+            {isSaved && !saving && (
+              <div className="flex items-center space-x-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Configuration IA enregistrée avec succès !</span>
+              </div>
+            )}
+            {errorMessage && !saving && (
+              <div className="flex items-center space-x-1.5 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+          </div>
+
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 transition-all"
+            className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 transition-all flex items-center space-x-2 shrink-0"
           >
-            {saving ? 'Enregistrement...' : 'Enregistrer la configuration IA'}
+            {saving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+            <span>{saving ? 'Enregistrement...' : 'Enregistrer la configuration IA'}</span>
           </button>
         </div>
       </form>

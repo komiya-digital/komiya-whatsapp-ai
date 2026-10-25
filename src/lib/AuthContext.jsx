@@ -50,18 +50,43 @@ export function AuthProvider({ children }) {
       }
       setProfile(prof);
 
-      // 2. Load or initialize business (fail-proof)
-      let biz = null;
+      // 2. Load or initialize business (fail-proof & local-first)
+      const compName = authUser.user_metadata?.company_name || 'Mon Entreprise';
+      const localBizKey = 'komiya_business_' + authUser.id;
+      let cachedBiz = null;
       try {
-        const compName = authUser.user_metadata?.company_name || 'Mon Entreprise';
-        biz = await getOrCreateBusiness(authUser.id, {
-          name: compName,
-          country: 'Côte d\'Ivoire',
-          currency: 'FCFA'
-        });
+        const raw = localStorage.getItem(localBizKey);
+        if (raw) cachedBiz = JSON.parse(raw);
+      } catch (e) {}
 
-        // Initialize default AI agent & automations in background if new business
+      // Default business object guaranteed to exist immediately
+      const defaultBiz = cachedBiz || {
+        id: authUser.id,
+        owner_id: authUser.id,
+        name: compName,
+        country: 'Côte d\'Ivoire',
+        currency: 'FCFA',
+        onboarding_completed: false,
+        whatsapp_connections: []
+      };
+
+      // Set business immediately so UI and pages are NEVER blocked
+      setBusiness(defaultBiz);
+      try { localStorage.setItem(localBizKey, JSON.stringify(defaultBiz)); } catch (e) {}
+
+      // Background sync with Supabase
+      getOrCreateBusiness(authUser.id, {
+        name: compName,
+        email: authUser.email,
+        fullName: authUser.user_metadata?.full_name || compName,
+        country: 'Côte d\'Ivoire',
+        currency: 'FCFA'
+      }).then((biz) => {
         if (biz?.id) {
+          setBusiness(biz);
+          try { localStorage.setItem(localBizKey, JSON.stringify(biz)); } catch (e) {}
+
+          // Initialize default AI agent & automations in background
           upsertAiAgent(biz.id, {
             name: 'Awa',
             companyDescription: `${biz.name || compName} - Boutique et services`,
@@ -73,12 +98,11 @@ export function AuthProvider({ children }) {
 
           upsertDefaultAutomations(biz.id).catch(() => {});
         }
-      } catch (e) {
-        console.warn('Business load note:', e.message);
-      }
-      setBusiness(biz);
+      }).catch((err) => {
+        console.warn('Background business sync note:', err.message);
+      });
 
-      return { user: authUser, profile: prof, business: biz };
+      return { user: authUser, profile: prof, business: defaultBiz };
     } catch (err) {
       console.error('Error loading user data:', err);
       return null;
@@ -277,35 +301,51 @@ export function AuthProvider({ children }) {
     const userEmail = currentUser.email || 'user@komiya.ci';
     const userFullName = currentUser.user_metadata?.full_name || compName;
 
-    // 1. Ensure profile exists first
+    const localBizKey = 'komiya_business_' + currentUser.id;
+    let localBiz = null;
     try {
-      const prof = await upsertProfile(currentUser.id, {
-        email: userEmail,
-        full_name: userFullName,
-      });
+      const raw = localStorage.getItem(localBizKey);
+      if (raw) localBiz = JSON.parse(raw);
+    } catch (e) {}
+
+    const fallbackBiz = localBiz || {
+      id: currentUser.id,
+      owner_id: currentUser.id,
+      name: compName,
+      country: 'Côte d\'Ivoire',
+      currency: 'FCFA',
+      onboarding_completed: false
+    };
+
+    // 1. Ensure profile exists first in background
+    upsertProfile(currentUser.id, {
+      email: userEmail,
+      full_name: userFullName,
+    }).then(prof => {
       if (prof) setProfile(prof);
-    } catch (e) {
+    }).catch(e => {
       console.warn('Profile sync in ensureBusiness note:', e.message);
-    }
+    });
 
     // 2. Resolve business
-    try {
-      const resolved = await getOrCreateBusiness(currentUser.id, {
-        name: compName,
-        email: userEmail,
-        fullName: userFullName,
-        country: 'Côte d\'Ivoire',
-        currency: 'FCFA'
-      });
+    getOrCreateBusiness(currentUser.id, {
+      name: compName,
+      email: userEmail,
+      fullName: userFullName,
+      country: 'Côte d\'Ivoire',
+      currency: 'FCFA'
+    }).then(resolved => {
       if (resolved?.id) {
         setBusiness(resolved);
-        return resolved;
+        try { localStorage.setItem(localBizKey, JSON.stringify(resolved)); } catch (e) {}
       }
-    } catch (e) {
-      console.error('ensureBusiness error:', e);
-      throw e;
-    }
-    return business;
+    }).catch(e => {
+      console.warn('ensureBusiness background sync note:', e.message);
+    });
+
+    // Set immediate business so no page is blocked
+    setBusiness(fallbackBiz);
+    return fallbackBiz;
   };
 
   const value = {
