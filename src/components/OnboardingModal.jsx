@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Building, Phone, Bot, Package, CheckCircle2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Sparkles, Building, Phone, Bot, Package, CheckCircle2, ArrowRight, ArrowLeft, X } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { 
   updateBusiness, 
@@ -38,6 +38,37 @@ export default function OnboardingModal({ isOpen, onClose }) {
   const [productDescription, setProductDescription] = useState('');
 
   if (!isOpen) return null;
+
+  const handleFinish = async () => {
+    setLoading(true);
+    try {
+      if (user?.id) {
+        localStorage.setItem('komiya_onboarding_completed_' + user.id, 'true');
+      }
+      if (business?.id) {
+        localStorage.setItem('komiya_onboarding_completed_' + business.id, 'true');
+      }
+      localStorage.setItem('komiya_onboarding_done', 'true');
+      await completeOnboarding();
+    } catch (e) {
+      console.warn('Complete onboarding error:', e);
+    } finally {
+      setLoading(false);
+      onClose();
+    }
+  };
+
+  const handleClose = async () => {
+    if (user?.id) {
+      localStorage.setItem('komiya_onboarding_completed_' + user.id, 'true');
+    }
+    if (business?.id) {
+      localStorage.setItem('komiya_onboarding_completed_' + business.id, 'true');
+    }
+    localStorage.setItem('komiya_onboarding_done', 'true');
+    try { await completeOnboarding(); } catch (e) {}
+    onClose();
+  };
 
   const handleNext = async () => {
     setStepError('');
@@ -147,25 +178,13 @@ export default function OnboardingModal({ isOpen, onClose }) {
     }
   };
 
-  const handleFinish = async () => {
-    setLoading(true);
-    try {
-      await completeOnboarding();
-    } catch (e) {
-      console.warn('Complete onboarding error:', e);
-    } finally {
-      setLoading(false);
-      onClose();
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl text-white relative overflow-hidden flex flex-col max-h-[90vh]">
         {/* Glow */}
         <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Progress bar */}
+        {/* Progress bar & Header */}
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
           <div className="flex items-center space-x-2">
             <span className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-extrabold text-xs flex items-center justify-center">
@@ -173,15 +192,25 @@ export default function OnboardingModal({ isOpen, onClose }) {
             </span>
             <span className="text-xs font-bold text-slate-300">Étape {step} sur 6</span>
           </div>
-          <div className="flex space-x-1.5">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div 
-                key={i} 
-                className={`h-1.5 w-6 rounded-full transition-all ${
-                  i <= step ? 'bg-emerald-400' : 'bg-slate-800'
-                }`}
-              />
-            ))}
+          <div className="flex items-center space-x-3">
+            <div className="flex space-x-1.5">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div 
+                  key={i} 
+                  className={`h-1.5 w-6 rounded-full transition-all ${
+                    i <= step ? 'bg-emerald-400' : 'bg-slate-800'
+                  }`}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              title="Fermer et ne plus afficher"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
 

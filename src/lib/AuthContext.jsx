@@ -59,10 +59,17 @@ export function AuthProvider({ children }) {
         if (raw) cachedBiz = JSON.parse(raw);
       } catch (e) {}
 
+      // Check if user completed onboarding locally or globally
+      const isCompletedLocally = localStorage.getItem('komiya_onboarding_done') === 'true' ||
+        localStorage.getItem('komiya_onboarding_completed_' + authUser.id) === 'true';
+
       // Check if we have a real cached business (where id != authUser.id)
       let defaultBiz = null;
       if (cachedBiz?.id && cachedBiz.id !== authUser.id) {
-        defaultBiz = cachedBiz;
+        defaultBiz = {
+          ...cachedBiz,
+          onboarding_completed: isCompletedLocally ? true : Boolean(cachedBiz.onboarding_completed)
+        };
       } else {
         defaultBiz = {
           id: authUser.id,
@@ -70,7 +77,7 @@ export function AuthProvider({ children }) {
           name: compName,
           country: 'Côte d\'Ivoire',
           currency: 'FCFA',
-          onboarding_completed: false,
+          onboarding_completed: isCompletedLocally,
           whatsapp_connections: []
         };
       }
@@ -89,6 +96,10 @@ export function AuthProvider({ children }) {
         });
 
         if (realBiz?.id) {
+          if (isCompletedLocally && !realBiz.onboarding_completed) {
+            realBiz.onboarding_completed = true;
+            updateBusiness(realBiz.id, { onboarding_completed: true }).catch(() => {});
+          }
           setBusiness(realBiz);
           try { localStorage.setItem(localBizKey, JSON.stringify(realBiz)); } catch (e) {}
 
@@ -282,8 +293,33 @@ export function AuthProvider({ children }) {
   };
 
   const completeOnboarding = async () => {
-    if (!business?.id) return;
-    await updateBusinessData({ onboarding_completed: true });
+    try { localStorage.setItem('komiya_onboarding_done', 'true'); } catch (e) {}
+    if (user?.id) {
+      try { localStorage.setItem('komiya_onboarding_completed_' + user.id, 'true'); } catch (e) {}
+    }
+    if (business?.id) {
+      try { localStorage.setItem('komiya_onboarding_completed_' + business.id, 'true'); } catch (e) {}
+    }
+
+    setBusiness(prev => {
+      const updated = { ...(prev || {}), onboarding_completed: true };
+      if (user?.id) {
+        try { localStorage.setItem('komiya_business_' + user.id, JSON.stringify(updated)); } catch (e) {}
+      }
+      return updated;
+    });
+
+    try {
+      let targetBiz = business;
+      if (!targetBiz?.id || targetBiz.id === user?.id) {
+        targetBiz = await ensureBusiness();
+      }
+      if (targetBiz?.id) {
+        await updateBusiness(targetBiz.id, { onboarding_completed: true });
+      }
+    } catch (e) {
+      console.warn('completeOnboarding backend update note:', e);
+    }
   };
 
   const refreshUserData = async () => {

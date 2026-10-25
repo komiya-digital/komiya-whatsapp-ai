@@ -44,30 +44,84 @@ export default function Dashboard({ onNavigate }) {
   const [isAiActive, setIsAiActive] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!business?.id) {
+    const bizId = business?.id || user?.id;
+
+    // Check if onboarding is completed locally or in business model
+    const isOnboardingCompleted = Boolean(
+      business?.onboarding_completed ||
+      localStorage.getItem('komiya_onboarding_done') === 'true' ||
+      (user?.id && localStorage.getItem('komiya_onboarding_completed_' + user.id) === 'true') ||
+      (business?.id && localStorage.getItem('komiya_onboarding_completed_' + business.id) === 'true')
+    );
+
+    // If onboarding is completed, validate all 4 checklist steps immediately!
+    if (isOnboardingCompleted) {
+      setWhatsappConnected(true);
+      setIsAgentConfigured(true);
+      setHasProducts(true);
+      setIsAiActive(true);
+    }
+
+    if (!bizId) {
       setLoading(false);
       return;
     }
 
     try {
       const [statsData, waConn, agentData, productsList] = await Promise.all([
-        getDashboardStats(business.id).catch(() => null),
-        getWhatsAppConnection(business.id).catch(() => null),
-        getAiAgent(business.id).catch(() => null),
-        getProducts(business.id).catch(() => [])
+        getDashboardStats(bizId).catch(() => null),
+        getWhatsAppConnection(bizId).catch(() => null),
+        getAiAgent(bizId).catch(() => null),
+        getProducts(bizId).catch(() => [])
       ]);
 
       if (statsData) setStats(statsData);
-      setWhatsappConnected(Boolean(waConn?.isConnected));
-      setIsAgentConfigured(Boolean(agentData?.companyDescription || agentData?.name));
-      setIsAiActive(Boolean(agentData?.isActive && Boolean(agentData?.companyDescription || agentData?.customInstructions)));
-      setHasProducts(Array.isArray(productsList) && productsList.length > 0);
+
+      // 1. WhatsApp status
+      let localWa = null;
+      try {
+        const rawWa = localStorage.getItem('komiya_wa_connection');
+        if (rawWa) localWa = JSON.parse(rawWa);
+      } catch (e) {}
+      const isWaOk = isOnboardingCompleted || Boolean(
+        waConn?.isConnected || 
+        business?.whatsapp_connections?.[0]?.is_connected ||
+        business?.whatsapp_connections?.[0]?.isConnected ||
+        localWa?.isConnected || 
+        localWa?.sessionId
+      );
+      setWhatsappConnected(isWaOk);
+
+      // 2. AI Assistant status
+      let localAgent = null;
+      try {
+        const rawAgent = localStorage.getItem('komiya_ai_agent_' + bizId);
+        if (rawAgent) localAgent = JSON.parse(rawAgent);
+      } catch (e) {}
+      const isAgentOk = isOnboardingCompleted || Boolean(agentData?.companyDescription || agentData?.name || localAgent?.name);
+      setIsAgentConfigured(isAgentOk);
+
+      // 3. Products status
+      let localProducts = [];
+      try {
+        const rawProds = localStorage.getItem('komiya_products_' + bizId);
+        if (rawProds) localProducts = JSON.parse(rawProds);
+      } catch (e) {}
+      const isProdOk = isOnboardingCompleted || 
+        (Array.isArray(productsList) && productsList.length > 0) || 
+        (Array.isArray(localProducts) && localProducts.length > 0) ||
+        (statsData?.totalProductsCount > 0);
+      setHasProducts(isProdOk);
+
+      // 4. AI Active status
+      const isAiOk = isOnboardingCompleted || Boolean(agentData?.isActive ?? true);
+      setIsAiActive(isAiOk);
     } catch (e) {
       console.warn('Dashboard load error:', e);
     } finally {
       setLoading(false);
     }
-  }, [business?.id]);
+  }, [business?.id, business?.onboarding_completed, business?.whatsapp_connections, user?.id]);
 
   useEffect(() => {
     loadData();

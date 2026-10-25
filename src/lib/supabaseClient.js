@@ -206,14 +206,33 @@ export async function getOrCreateBusiness(ownerId, defaultData = {}) {
 
 export async function updateBusiness(businessId, updates) {
   if (!businessId) return null;
+  const realBizId = await resolveRealBusinessId(businessId) || businessId;
+
+  if (updates.onboarding_completed !== undefined) {
+    try {
+      localStorage.setItem('komiya_onboarding_completed_' + realBizId, String(updates.onboarding_completed));
+      if (updates.onboarding_completed) {
+        localStorage.setItem('komiya_onboarding_done', 'true');
+      }
+    } catch (e) {}
+  }
+
   const { data, error } = await supabase
     .from('businesses')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', businessId)
+    .eq('id', realBizId)
     .select()
     .maybeSingle();
-  if (error) throw error;
-  return data;
+
+  if (error) {
+    console.warn('updateBusiness warning, retrying without select:', error.message);
+    const { error: err2 } = await supabase
+      .from('businesses')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', realBizId);
+    if (err2) throw err2;
+  }
+  return data || { id: realBizId, ...updates };
 }
 
 /**
