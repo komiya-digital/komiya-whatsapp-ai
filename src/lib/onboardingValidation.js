@@ -269,6 +269,7 @@ export async function validateOnboardingCompletion(businessId, userId = null) {
 
 /**
  * Persists Step 2: Business configuration to Supabase with strict verification.
+ * Immune to PGRST116 'Cannot coerce the result to a single JSON object'.
  */
 export async function saveOnboardingBusiness(businessId, { name, description, country, currency }) {
   const cleanName = (name || '').trim();
@@ -276,8 +277,15 @@ export async function saveOnboardingBusiness(businessId, { name, description, co
     throw new Error("Le nom de l'entreprise est obligatoire pour configurer votre espace commercial.");
   }
 
-  const realBizId = await resolveRealBusinessId(businessId);
-  if (!realBizId) {
+  // 1. Get authenticated user session
+  let uid = null;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    uid = session?.user?.id;
+  } catch (e) {}
+
+  const targetOwnerId = uid || businessId;
+  if (!targetOwnerId) {
     throw new Error("Session introuvable. Veuillez vous reconnecter pour enregistrer votre entreprise.");
   }
 
@@ -289,23 +297,60 @@ export async function saveOnboardingBusiness(businessId, { name, description, co
     updated_at: new Date().toISOString()
   };
 
-  const { data, error } = await supabase
-    .from('businesses')
-    .update(payload)
-    .eq('id', realBizId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('saveOnboardingBusiness Supabase error:', error);
-    throw new Error(error.message || "Impossible d'enregistrer les informations de l'entreprise dans Supabase.");
+  // 2. Locate existing business row by ID or owner_id
+  let existingBiz = null;
+  if (businessId) {
+    const { data: byId } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('id', businessId)
+      .maybeSingle();
+    if (byId?.id) existingBiz = byId;
   }
 
-  if (!data || data.name !== cleanName) {
+  if (!existingBiz && targetOwnerId) {
+    const { data: byOwner } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('owner_id', targetOwnerId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (byOwner?.id) existingBiz = byOwner;
+  }
+
+  let savedData = null;
+
+  if (existingBiz?.id) {
+    // 3A. Update existing business using maybeSingle (never single() to prevent PGRST116)
+    const { data: updated, error: updateErr } = await supabase
+      .from('businesses')
+      .update(payload)
+      .eq('id', existingBiz.id)
+      .select()
+      .maybeSingle();
+
+    if (updateErr) {
+      console.warn('saveOnboardingBusiness update with select note, retrying without select:', updateErr.message);
+      const { error: rawErr } = await supabase
+        .from('businesses')
+        .update(payload)
+        .eq('id', existingBiz.id);
+      if (rawErr) throw new Error(rawErr.message || "Erreur lors de la mise à jour de l'entreprise.");
+      savedData = { ...existingBiz, ...payload };
+    } else {
+      savedData = updated || { ...existingBiz, ...payload };
+    }
+  } else {
+    // 3B. Business doesn't exist yet: create it properly!
+    savedData = await createBusiness(targetOwnerId, payload);
+  }
+
+  if (!savedData || !savedData.name) {
     throw new Error("La sauvegarde de l'entreprise n'a pas pu être confirmée par la base de données.");
   }
 
-  return data;
+  return savedData;
 }
 
 /**

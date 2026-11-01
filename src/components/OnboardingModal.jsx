@@ -183,12 +183,16 @@ export default function OnboardingModal({ isOpen, onClose }) {
           return;
         }
 
-        await saveOnboardingBusiness(currentBiz.id, {
+        const savedBiz = await saveOnboardingBusiness(currentBiz.id, {
           name: businessName.trim(),
           description: description.trim(),
           country,
           currency
         });
+
+        if (savedBiz?.id) {
+          currentBiz = savedBiz;
+        }
 
         if (refreshUserData) {
           refreshUserData().catch(() => {});

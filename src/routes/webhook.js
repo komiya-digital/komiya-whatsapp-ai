@@ -145,7 +145,7 @@ router.post('/wasender', async (req, res) => {
           last_interaction_at: new Date().toISOString()
         })
         .select()
-        .single();
+        .maybeSingle();
       if (newContact) {
         contactId = newContact.id;
         currentScore = 10;
@@ -181,7 +181,7 @@ router.post('/wasender', async (req, res) => {
           is_ai_active: true
         })
         .select()
-        .single();
+        .maybeSingle();
       if (newConv) {
         conversationId = newConv.id;
         isAiActive = true;
