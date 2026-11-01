@@ -21,6 +21,7 @@ import {
   getAiAgent, 
   getProducts 
 } from '../lib/supabaseClient';
+import { validateOnboardingCompletion, ONBOARDING_STATUS } from '../lib/onboardingValidation';
 
 export default function Dashboard({ onNavigate }) {
   const { user, profile, business } = useAuth();
@@ -42,25 +43,10 @@ export default function Dashboard({ onNavigate }) {
   const [isAgentConfigured, setIsAgentConfigured] = useState(false);
   const [hasProducts, setHasProducts] = useState(false);
   const [isAiActive, setIsAiActive] = useState(false);
+  const [validationReport, setValidationReport] = useState(null);
 
   const loadData = useCallback(async () => {
     const bizId = business?.id || user?.id;
-
-    // Check if onboarding is completed locally or in business model
-    const isOnboardingCompleted = Boolean(
-      business?.onboarding_completed ||
-      localStorage.getItem('komiya_onboarding_done') === 'true' ||
-      (user?.id && localStorage.getItem('komiya_onboarding_completed_' + user.id) === 'true') ||
-      (business?.id && localStorage.getItem('komiya_onboarding_completed_' + business.id) === 'true')
-    );
-
-    // If onboarding is completed, validate all 4 checklist steps immediately!
-    if (isOnboardingCompleted) {
-      setWhatsappConnected(true);
-      setIsAgentConfigured(true);
-      setHasProducts(true);
-      setIsAiActive(true);
-    }
 
     if (!bizId) {
       setLoading(false);
@@ -68,60 +54,48 @@ export default function Dashboard({ onNavigate }) {
     }
 
     try {
-      const [statsData, waConn, agentData, productsList] = await Promise.all([
+      const [statsData, valReport, waConn, agentData, productsList] = await Promise.all([
         getDashboardStats(bizId).catch(() => null),
+        validateOnboardingCompletion(bizId, user?.id).catch(() => null),
         getWhatsAppConnection(bizId).catch(() => null),
         getAiAgent(bizId).catch(() => null),
         getProducts(bizId).catch(() => [])
       ]);
 
       if (statsData) setStats(statsData);
+      if (valReport) setValidationReport(valReport);
 
-      // 1. WhatsApp status
-      let localWa = null;
-      try {
-        const rawWa = localStorage.getItem('komiya_wa_connection');
-        if (rawWa) localWa = JSON.parse(rawWa);
-      } catch (e) {}
-      const isWaOk = isOnboardingCompleted || Boolean(
-        waConn?.isConnected || 
-        business?.whatsapp_connections?.[0]?.is_connected ||
-        business?.whatsapp_connections?.[0]?.isConnected ||
-        localWa?.isConnected || 
-        localWa?.sessionId
+      // 1. WhatsApp status: strictly verified against database
+      const isWaOk = Boolean(
+        valReport?.steps?.whatsapp?.status === ONBOARDING_STATUS.COMPLETED ||
+        (waConn?.isConnected && waConn?.phoneNumber && waConn?.sessionId && waConn?.apiKey)
       );
       setWhatsappConnected(isWaOk);
 
-      // 2. AI Assistant status
-      let localAgent = null;
-      try {
-        const rawAgent = localStorage.getItem('komiya_ai_agent_' + bizId);
-        if (rawAgent) localAgent = JSON.parse(rawAgent);
-      } catch (e) {}
-      const isAgentOk = isOnboardingCompleted || Boolean(agentData?.companyDescription || agentData?.name || localAgent?.name);
+      // 2. AI Assistant status: strictly verified against database
+      const isAgentOk = Boolean(
+        valReport?.steps?.assistant?.status === ONBOARDING_STATUS.COMPLETED ||
+        (agentData?.name && (agentData?.customInstructions || agentData?.companyDescription))
+      );
       setIsAgentConfigured(isAgentOk);
 
-      // 3. Products status
-      let localProducts = [];
-      try {
-        const rawProds = localStorage.getItem('komiya_products_' + bizId);
-        if (rawProds) localProducts = JSON.parse(rawProds);
-      } catch (e) {}
-      const isProdOk = isOnboardingCompleted || 
-        (Array.isArray(productsList) && productsList.length > 0) || 
-        (Array.isArray(localProducts) && localProducts.length > 0) ||
-        (statsData?.totalProductsCount > 0);
+      // 3. Products status: strictly verified against database
+      const isProdOk = Boolean(
+        valReport?.steps?.products?.status === ONBOARDING_STATUS.COMPLETED ||
+        (Array.isArray(productsList) && productsList.length > 0) ||
+        (statsData?.totalProductsCount > 0)
+      );
       setHasProducts(isProdOk);
 
-      // 4. AI Active status
-      const isAiOk = isOnboardingCompleted || Boolean(agentData?.isActive ?? true);
+      // 4. AI Active status: based on agent settings
+      const isAiOk = Boolean(agentData?.isActive ?? isAgentOk);
       setIsAiActive(isAiOk);
     } catch (e) {
       console.warn('Dashboard load error:', e);
     } finally {
       setLoading(false);
     }
-  }, [business?.id, business?.onboarding_completed, business?.whatsapp_connections, user?.id]);
+  }, [business?.id, user?.id]);
 
   useEffect(() => {
     loadData();
@@ -224,6 +198,8 @@ export default function Dashboard({ onNavigate }) {
 
       {/* Onboarding Checklist Banner */}
       <OnboardingChecklist
+        validationReport={validationReport}
+        isBusinessConfigured={Boolean(business?.name && business.name !== 'Mon Entreprise')}
         isConnected={whatsappConnected}
         isAgentConfigured={isAgentConfigured}
         hasProducts={hasProducts}

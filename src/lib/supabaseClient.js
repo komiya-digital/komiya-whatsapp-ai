@@ -210,9 +210,9 @@ export async function updateBusiness(businessId, updates) {
 
   if (updates.onboarding_completed !== undefined) {
     try {
-      localStorage.setItem('komiya_onboarding_completed_' + realBizId, String(updates.onboarding_completed));
-      if (updates.onboarding_completed) {
-        localStorage.setItem('komiya_onboarding_done', 'true');
+      if (!updates.onboarding_completed) {
+        localStorage.removeItem('komiya_onboarding_done');
+        localStorage.removeItem('komiya_onboarding_completed_' + realBizId);
       }
     } catch (e) {}
   }

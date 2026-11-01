@@ -233,7 +233,7 @@ export default function Automations({ onNavigate }) {
           <div className="mt-5 pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center space-x-2 text-xs text-emerald-300 font-semibold">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Étape 4 validée : Votre onboarding est 100% complet !</span>
+              <span>IA autonome active : Les réponses instantanées et relances sont enclenchées.</span>
             </div>
             <div className="flex items-center gap-2">
               {onNavigate && (

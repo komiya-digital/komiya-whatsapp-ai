@@ -10,6 +10,7 @@ import {
   upsertAiAgent,
   upsertDefaultAutomations
 } from './supabaseClient';
+import { validateOnboardingCompletion } from './onboardingValidation';
 
 const AuthContext = createContext(null);
 
@@ -59,16 +60,12 @@ export function AuthProvider({ children }) {
         if (raw) cachedBiz = JSON.parse(raw);
       } catch (e) {}
 
-      // Check if user completed onboarding locally or globally
-      const isCompletedLocally = localStorage.getItem('komiya_onboarding_done') === 'true' ||
-        localStorage.getItem('komiya_onboarding_completed_' + authUser.id) === 'true';
-
       // Check if we have a real cached business (where id != authUser.id)
       let defaultBiz = null;
       if (cachedBiz?.id && cachedBiz.id !== authUser.id) {
         defaultBiz = {
           ...cachedBiz,
-          onboarding_completed: isCompletedLocally ? true : Boolean(cachedBiz.onboarding_completed)
+          onboarding_completed: Boolean(cachedBiz.onboarding_completed)
         };
       } else {
         defaultBiz = {
@@ -77,7 +74,7 @@ export function AuthProvider({ children }) {
           name: compName,
           country: 'Côte d\'Ivoire',
           currency: 'FCFA',
-          onboarding_completed: isCompletedLocally,
+          onboarding_completed: false,
           whatsapp_connections: []
         };
       }
@@ -96,23 +93,11 @@ export function AuthProvider({ children }) {
         });
 
         if (realBiz?.id) {
-          if (isCompletedLocally && !realBiz.onboarding_completed) {
-            realBiz.onboarding_completed = true;
-            updateBusiness(realBiz.id, { onboarding_completed: true }).catch(() => {});
-          }
+          // Strictly preserve real database onboarding_completed state
           setBusiness(realBiz);
           try { localStorage.setItem(localBizKey, JSON.stringify(realBiz)); } catch (e) {}
 
-          // Initialize default AI agent & automations in background
-          upsertAiAgent(realBiz.id, {
-            name: 'Awa',
-            companyDescription: `${realBiz.name || compName} - Boutique et services`,
-            country: realBiz.country || 'Côte d\'Ivoire',
-            tone: 'Professionnel',
-            objective: 'Vendre + qualifier',
-            isActive: true
-          }).catch(() => {});
-
+          // Ensure default automation definitions exist without faking completion
           upsertDefaultAutomations(realBiz.id).catch(() => {});
 
           return { user: authUser, profile: prof, business: realBiz };
@@ -209,15 +194,6 @@ export function AuthProvider({ children }) {
         setBusiness(biz);
 
         if (biz?.id) {
-          await upsertAiAgent(biz.id, {
-            name: 'Awa',
-            companyDescription: `${companyName || 'Notre boutique'}`,
-            country: 'Côte d\'Ivoire',
-            tone: 'Professionnel',
-            objective: 'Vendre + qualifier',
-            isActive: true
-          }).catch(() => {});
-
           await upsertDefaultAutomations(biz.id).catch(() => {});
         }
       } catch (err) {
@@ -293,13 +269,28 @@ export function AuthProvider({ children }) {
   };
 
   const completeOnboarding = async () => {
-    try { localStorage.setItem('komiya_onboarding_done', 'true'); } catch (e) {}
-    if (user?.id) {
-      try { localStorage.setItem('komiya_onboarding_completed_' + user.id, 'true'); } catch (e) {}
+    let targetBiz = business;
+    if (!targetBiz?.id || targetBiz.id === user?.id) {
+      targetBiz = await ensureBusiness();
     }
-    if (business?.id) {
-      try { localStorage.setItem('komiya_onboarding_completed_' + business.id, 'true'); } catch (e) {}
+    if (!targetBiz?.id) {
+      throw new Error("Aucune entreprise associée pour finaliser l'onboarding.");
     }
+
+    // STRICT VERIFICATION: Verify real persisted records in Supabase
+    const report = await validateOnboardingCompletion(targetBiz.id, user?.id);
+    if (!report.isComplete) {
+      const missingLabels = report.missingRequiredSteps.map(s => {
+        if (s === 'business') return 'Entreprise';
+        if (s === 'assistant') return 'Assistant IA';
+        if (s === 'whatsapp') return 'WhatsApp';
+        return s;
+      }).join(', ');
+      throw new Error(`L'onboarding ne peut être finalisé : étape(s) obligatoire(s) manquante(s) (${missingLabels}).`);
+    }
+
+    // Update Supabase
+    await updateBusiness(targetBiz.id, { onboarding_completed: true });
 
     setBusiness(prev => {
       const updated = { ...(prev || {}), onboarding_completed: true };
@@ -309,17 +300,7 @@ export function AuthProvider({ children }) {
       return updated;
     });
 
-    try {
-      let targetBiz = business;
-      if (!targetBiz?.id || targetBiz.id === user?.id) {
-        targetBiz = await ensureBusiness();
-      }
-      if (targetBiz?.id) {
-        await updateBusiness(targetBiz.id, { onboarding_completed: true });
-      }
-    } catch (e) {
-      console.warn('completeOnboarding backend update note:', e);
-    }
+    return true;
   };
 
   const refreshUserData = async () => {

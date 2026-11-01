@@ -55,12 +55,11 @@ function MainApp() {
   // Check onboarding status when business loads
   useEffect(() => {
     if (isAuthenticated && business && !hasShownOnboarding.current) {
-      const isCompleted = business.onboarding_completed === true ||
-        localStorage.getItem('komiya_onboarding_done') === 'true' ||
-        (user?.id && localStorage.getItem('komiya_onboarding_completed_' + user.id) === 'true') ||
-        (business.id && localStorage.getItem('komiya_onboarding_completed_' + business.id) === 'true');
+      const targetId = business.id || user?.id;
+      const isDismissedThisSession = targetId ? sessionStorage.getItem('komiya_onboarding_dismissed_' + targetId) === 'true' : false;
+      const isCompleted = business.onboarding_completed === true;
 
-      if (!isCompleted && business.onboarding_completed === false) {
+      if (!isCompleted && !isDismissedThisSession) {
         setShowOnboarding(true);
       } else {
         setShowOnboarding(false);
@@ -138,11 +137,12 @@ function MainApp() {
         isOpen={showOnboarding} 
         onClose={async () => {
           setShowOnboarding(false);
-          try {
-            localStorage.setItem('komiya_onboarding_done', 'true');
-            if (user?.id) localStorage.setItem('komiya_onboarding_completed_' + user.id, 'true');
-            if (business?.id) localStorage.setItem('komiya_onboarding_completed_' + business.id, 'true');
-          } catch (e) {}
+          const targetId = business?.id || user?.id;
+          if (targetId) {
+            try {
+              sessionStorage.setItem('komiya_onboarding_dismissed_' + targetId, 'true');
+            } catch (e) {}
+          }
           try { await refreshUserData(); } catch (e) { /* ignore */ }
         }} 
       />
