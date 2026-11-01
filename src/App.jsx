@@ -13,6 +13,7 @@ import Automations from './pages/Automations';
 import Analytics from './pages/Analytics';
 import SettingsPage from './pages/Settings';
 import OnboardingModal from './components/OnboardingModal';
+import { validateOnboardingCompletion } from './lib/onboardingValidation';
 import { Menu, Sparkles, RefreshCw } from 'lucide-react';
 
 function normalizePath(pathname) {
@@ -57,13 +58,19 @@ function MainApp() {
     if (isAuthenticated && business && !hasShownOnboarding.current) {
       const targetId = business.id || user?.id;
       const isDismissedThisSession = targetId ? sessionStorage.getItem('komiya_onboarding_dismissed_' + targetId) === 'true' : false;
-      const isCompleted = business.onboarding_completed === true;
 
-      if (!isCompleted && !isDismissedThisSession) {
-        setShowOnboarding(true);
-      } else {
-        setShowOnboarding(false);
-      }
+      // Dynamically verify true onboarding state against database tables
+      validateOnboardingCompletion(targetId, user?.id).then(report => {
+        if (!report.isComplete && !isDismissedThisSession) {
+          setShowOnboarding(true);
+        } else {
+          setShowOnboarding(false);
+        }
+      }).catch(() => {
+        if (!isDismissedThisSession) {
+          setShowOnboarding(true);
+        }
+      });
       hasShownOnboarding.current = true; // une seule évaluation par session
     }
   }, [isAuthenticated, business, user?.id]);

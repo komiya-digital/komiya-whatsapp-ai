@@ -201,25 +201,6 @@ export async function validateOnboardingCompletion(businessId, userId = null) {
     const requiredCompletedCount = [isBusinessComplete, isAgentComplete, isWhatsAppComplete].filter(Boolean).length;
     const progressPercent = Math.round((completedCount / 4) * 100);
 
-    // Sync database onboarding_completed flag to guarantee 100% coherence
-    if (biz?.id) {
-      if (isComplete && !biz.onboarding_completed) {
-        // Genuine completion reached, update DB
-        await supabase
-          .from('businesses')
-          .update({ onboarding_completed: true, updated_at: new Date().toISOString() })
-          .eq('id', biz.id)
-          .catch(() => {});
-      } else if (!isComplete && biz.onboarding_completed) {
-        // Discrepancy detected (e.g. false validation previously recorded): fix it!
-        await supabase
-          .from('businesses')
-          .update({ onboarding_completed: false, updated_at: new Date().toISOString() })
-          .eq('id', biz.id)
-          .catch(() => {});
-      }
-    }
-
     return {
       isComplete,
       businessId: realBizId,

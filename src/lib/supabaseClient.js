@@ -157,7 +157,6 @@ export async function createBusiness(ownerId, businessData = {}) {
     description: businessData.description || '',
     country: businessData.country || 'Côte d\'Ivoire',
     currency: businessData.currency || 'FCFA',
-    onboarding_completed: false,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -214,31 +213,40 @@ export async function updateBusiness(businessId, updates) {
   if (!businessId) return null;
   const realBizId = await resolveRealBusinessId(businessId) || businessId;
 
-  if (updates.onboarding_completed !== undefined) {
+  // Filter out columns that don't exist in Supabase businesses table
+  const { onboarding_completed, whatsapp_connections, ...allowedUpdates } = updates;
+
+  if (onboarding_completed !== undefined) {
     try {
-      if (!updates.onboarding_completed) {
+      if (!onboarding_completed) {
         localStorage.removeItem('komiya_onboarding_done');
         localStorage.removeItem('komiya_onboarding_completed_' + realBizId);
       }
     } catch (e) {}
   }
 
-  const { data, error } = await supabase
-    .from('businesses')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', realBizId)
-    .select()
-    .maybeSingle();
-
-  if (error) {
-    console.warn('updateBusiness warning, retrying without select:', error.message);
-    const { error: err2 } = await supabase
+  // If there are real columns to update in businesses table
+  if (Object.keys(allowedUpdates).length > 0) {
+    const dbPayload = { ...allowedUpdates, updated_at: new Date().toISOString() };
+    const { data, error } = await supabase
       .from('businesses')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', realBizId);
-    if (err2) throw err2;
+      .update(dbPayload)
+      .eq('id', realBizId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn('updateBusiness warning, retrying without select:', error.message);
+      const { error: err2 } = await supabase
+        .from('businesses')
+        .update(dbPayload)
+        .eq('id', realBizId);
+      if (err2) throw err2;
+    }
+    return data || { id: realBizId, ...updates };
   }
-  return data || { id: realBizId, ...updates };
+
+  return { id: realBizId, ...updates };
 }
 
 /**
