@@ -58,8 +58,27 @@ router.post('/wasender', async (req, res) => {
     console.log(`[Production WhatsApp Webhook] ${senderPhone}: "${messageText}"`);
 
     // 4. Identify Session / WhatsApp Connection & Business
-    const incomingSessionId = payload?.sessionId || payload?.session_id || payload?.data?.sessionId || null;
-    const receiverPhone = payload?.device_id || payload?.phone_number || null;
+    const incomingSessionId = (
+      req.query?.session || 
+      req.query?.sessionId || 
+      payload?.sessionId || 
+      payload?.session_id || 
+      payload?.session || 
+      payload?.data?.sessionId || 
+      payload?.data?.session || 
+      config.wasender.sessionId || 
+      null
+    );
+    const receiverPhone = (
+      req.query?.phone || 
+      payload?.device_id || 
+      payload?.phone_number || 
+      payload?.data?.phone || 
+      payload?.data?.receiver || 
+      null
+    );
+
+    console.log(`[Webhook Details] Sender: ${senderPhone}, Session: ${incomingSessionId}, Receiver: ${receiverPhone}`);
 
     let businessId = null;
     let apiKey = config.wasender.apiKey;
@@ -94,6 +113,20 @@ router.post('/wasender', async (req, res) => {
           .limit(1)
           .maybeSingle();
         if (data) connection = data;
+      }
+
+      // If still not found, check businesses table for default tenant
+      if (!connection) {
+        const { data: firstBiz } = await supabaseServer
+          .from('businesses')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (firstBiz?.id) {
+          businessId = firstBiz.id;
+          console.log(`[Webhook Fallback] Linked incoming message to business ${firstBiz.name} (${businessId})`);
+        }
       }
 
       if (connection) {

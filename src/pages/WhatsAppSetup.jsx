@@ -11,11 +11,18 @@ export default function WhatsAppSetup({ onNavigate }) {
   const [sessionId, setSessionId] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedSecret, setCopiedSecret] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
   const webhookUrl = `${window.location.origin}/api/webhooks/wasender`;
+  const webhookSecret = 'ae6a6ccb4d85577e0bb7edb44de41899';
+
+  const handleCopySecret = () => {
+    navigator.clipboard.writeText(webhookSecret);
+    setCopiedSecret(true);
+    setTimeout(() => setCopiedSecret(false), 2000);
+  };
 
   const loadData = useCallback(async () => {
     // 1. Instant cache recovery from localStorage
@@ -411,6 +418,29 @@ export default function WhatsAppSetup({ onNavigate }) {
             <Copy className="w-3.5 h-3.5" />
             <span>{copied ? 'Copié !' : 'Copier'}</span>
           </button>
+        </div>
+
+        {/* Webhook Secret */}
+        <div className="pt-2">
+          <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+            <span>Webhook Secret (optionnel pour WASenderAPI)</span>
+            <span className="text-[10px] text-emerald-400 font-normal">Identifiant de sécurité</span>
+          </label>
+          <div className="flex items-center space-x-2 bg-slate-800/90 p-2.5 rounded-xl border border-slate-700">
+            <code className="text-xs text-slate-300 font-mono flex-1 overflow-x-auto">
+              {webhookSecret}
+            </code>
+            <button
+              onClick={handleCopySecret}
+              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center space-x-1 shrink-0"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>{copiedSecret ? 'Copié !' : 'Copier le Secret'}</span>
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">
+            Si votre tableau de bord WASenderAPI demande un <em>Webhook Secret</em>, vous pouvez coller cette valeur.
+          </p>
         </div>
 
         <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl flex items-start space-x-2.5">
