@@ -11,6 +11,7 @@ export default function WhatsAppSetup({ onNavigate }) {
   const [sessionId, setSessionId] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
