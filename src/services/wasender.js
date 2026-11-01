@@ -14,13 +14,15 @@ const client = axios.create({
  */
 export async function sendPresence(to, status = 'composing', apiKey = null) {
   try {
+    if (!to) return;
+    const cleanJid = to.includes('@') ? to : `${to.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
     const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
     await client.post('/send-presence-update', {
-      to,
-      status
+      jid: cleanJid,
+      type: status
     }, { headers });
   } catch (error) {
-    console.error('Error sending presence update:', error.response?.data || error.message);
+    console.warn('WASender presence note:', error.response?.data?.message || error.message);
   }
 }
 

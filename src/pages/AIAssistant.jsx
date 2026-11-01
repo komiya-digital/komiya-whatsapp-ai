@@ -154,14 +154,15 @@ export default function AIAssistant({ onNavigate }) {
           incomingMessage: userText,
           history: testMessages,
           agentConfig: formData,
-          products: businessProducts
+          products: businessProducts,
+          businessData: business || { name: formData.companyDescription || 'Mon Entreprise', currency: business?.currency || 'FCFA' }
         })
       });
 
       const data = await res.json();
-      setTestMessages(prev => [...prev, { role: 'model', text: data.replyText || "Je vais vérifier cela pour vous." }]);
+      setTestMessages(prev => [...prev, { role: 'model', text: data.replyText || `Bienvenue chez ${business?.name || 'notre entreprise'} ! Comment puis-je vous aider ?` }]);
     } catch (err) {
-      setTestMessages(prev => [...prev, { role: 'model', text: "Bonjour ! Comment puis-je vous renseigner ?" }]);
+      setTestMessages(prev => [...prev, { role: 'model', text: `Bienvenue chez ${business?.name || 'notre entreprise'} ! Que souhaitez-vous découvrir ?` }]);
     } finally {
       setTestLoading(false);
     }

@@ -45,19 +45,20 @@ app.use('/api/webhook', webhookRouter);
 // AI Test Simulator Route
 app.post('/api/ai/test', async (req, res) => {
   try {
-    const { incomingMessage, history, agentConfig, products } = req.body;
+    const { incomingMessage, history, agentConfig, products, businessData } = req.body;
     const result = await processAIService({
       senderPhone: '+22500000000',
       incomingMessage: incomingMessage || 'Bonjour',
       history: history || [],
       agentConfig: agentConfig || {},
       products: products || [],
+      businessData: businessData || {},
       currentScore: 0
     });
     res.json(result);
   } catch (error) {
     console.error('AI Test Route Error:', error);
-    res.json({ replyText: 'Je vais vérifier cela pour vous.' });
+    res.json({ replyText: "Bonjour ! Je suis à votre service pour vous orienter. Que souhaitez-vous découvrir aujourd'hui ?" });
   }
 });
 

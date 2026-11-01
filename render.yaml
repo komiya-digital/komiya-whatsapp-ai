@@ -15,3 +15,13 @@ services:
         value: https://glbbwuyznvuybyredtvq.supabase.co
       - key: SUPABASE_ANON_KEY
         value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdsYmJ3dXl6bnZ1eWJ5cmVkdHZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MjU4NjIsImV4cCI6MjEwNTQwMTg2Mn0.h_D3gDBwMZTGiGGChj55TAAl_t2360l1cewKO91khy8
+      - key: WASENDER_API_KEY
+        sync: false
+      - key: WASENDER_SESSION_ID
+        sync: false
+      - key: WASENDER_WEBHOOK_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
