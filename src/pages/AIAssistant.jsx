@@ -119,10 +119,20 @@ export default function AIAssistant({ onNavigate }) {
       }
     } catch (e) {}
 
-    // 2. Background sync with Supabase
+    // 2. Background sync with Supabase & Server Tenant Registry
     try {
       if (bizId) {
         await upsertAiAgent(bizId, formData);
+        fetch('/api/tenants/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            businessId: bizId,
+            agentConfig: formData,
+            products: businessProducts,
+            businessData: currentBiz
+          })
+        }).catch(() => {});
       }
       setIsSaved(true);
       if (refreshUserData) {

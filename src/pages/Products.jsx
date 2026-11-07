@@ -188,6 +188,18 @@ export default function Products({ onNavigate }) {
       try {
         localStorage.setItem('komiya_products_' + bizId, JSON.stringify(next));
       } catch (e) {}
+
+      // Sync updated products catalog to server tenant registry
+      fetch('/api/tenants/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessId: bizId,
+          businessData: business,
+          products: next
+        })
+      }).catch(() => {});
+
       return next;
     });
 

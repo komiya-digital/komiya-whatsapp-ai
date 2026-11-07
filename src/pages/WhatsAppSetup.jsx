@@ -16,7 +16,7 @@ export default function WhatsAppSetup({ onNavigate }) {
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
-  const webhookUrl = `${window.location.origin}/api/webhooks/wasender`;
+  const webhookUrl = `${window.location.origin}/api/webhooks/wasender${sessionId ? `?session=${encodeURIComponent(sessionId.trim())}${business?.id ? `&bid=${encodeURIComponent(business.id)}` : ''}` : ''}`;
   const webhookSecret = 'ae6a6ccb4d85577e0bb7edb44de41899';
 
   const handleCopySecret = () => {
@@ -134,6 +134,23 @@ export default function WhatsAppSetup({ onNavigate }) {
         } catch (err) {
           console.warn('Supabase WhatsApp sync note:', err);
           supabaseError = err;
+        }
+
+        // Also sync tenant directly to local backend registry for resilient webhook routing
+        try {
+          await fetch('/api/tenants/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              businessId: currentBiz.id,
+              sessionId: sessionId.trim(),
+              phoneNumber: phoneNumber.trim(),
+              apiKey: apiKey.trim(),
+              businessData: currentBiz
+            })
+          });
+        } catch (syncErr) {
+          console.warn('Backend tenant sync note:', syncErr.message);
         }
       }
 

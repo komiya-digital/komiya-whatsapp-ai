@@ -6,6 +6,7 @@ import { config } from './config.js';
 import webhookRouter from './routes/webhook.js';
 import { processAIService } from './services/aiService.js';
 import { sendTextMessage } from './services/wasender.js';
+import { tenantRegistry } from './services/tenantRegistry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,10 +43,49 @@ app.use(express.static(distPath));
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/webhook', webhookRouter);
 
+// Tenant Synchronization Endpoint (Auto-syncs business, agent, and products from UI)
+app.post('/api/tenants/sync', (req, res) => {
+  try {
+    const { businessId, sessionId, phoneNumber, apiKey, businessData, agentConfig, products, faqs } = req.body;
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: 'businessId is required' });
+    }
+
+    const tenant = tenantRegistry.registerTenant({
+      businessId,
+      sessionId,
+      phoneNumber,
+      apiKey,
+      businessData,
+      agentConfig,
+      products,
+      faqs
+    });
+
+    res.json({ success: true, tenant });
+  } catch (err) {
+    console.error('Tenant sync error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Tenants Status & Health
+app.get('/api/tenants/status', (req, res) => {
+  const tenants = tenantRegistry.getAllTenants().map(t => ({
+    id: t.id,
+    name: t.businessData?.name,
+    sessionId: t.sessionId,
+    phoneNumber: t.phoneNumber,
+    productsCount: t.products?.length || 0,
+    updatedAt: t.updatedAt
+  }));
+  res.json({ count: tenants.length, tenants });
+});
+
 // AI Test Simulator Route
 app.post('/api/ai/test', async (req, res) => {
   try {
-    const { incomingMessage, history, agentConfig, products, businessData } = req.body;
+    const { incomingMessage, history, agentConfig, products, businessData, faqs } = req.body;
     const result = await processAIService({
       senderPhone: '+22500000000',
       incomingMessage: incomingMessage || 'Bonjour',
@@ -53,21 +93,24 @@ app.post('/api/ai/test', async (req, res) => {
       agentConfig: agentConfig || {},
       products: products || [],
       businessData: businessData || {},
+      faqs: faqs || [],
       currentScore: 0
     });
     res.json(result);
   } catch (error) {
     console.error('AI Test Route Error:', error);
-    res.json({ replyText: "Bonjour ! Je suis à votre service pour vous orienter. Que souhaitez-vous découvrir aujourd'hui ?" });
+    res.json({ 
+      replyText: "Bonjour ! Je suis à votre service pour vous orienter. Que souhaitez-vous découvrir aujourd'hui ?" 
+    });
   }
 });
 
 // WASender Outbound Message Route
 app.post('/api/wasender/send-message', async (req, res) => {
   try {
-    const { to, text } = req.body;
+    const { to, text, apiKey } = req.body;
     if (to && text) {
-      await sendTextMessage(to, text);
+      await sendTextMessage(to, text, apiKey);
     }
     res.json({ success: true });
   } catch (error) {
@@ -81,7 +124,8 @@ app.get('/api/health', (req, res) => {
     status: 'online',
     service: 'Komiya WhatsApp AI Production Platform',
     appUrl: config.appUrl,
-    wasenderApiConnected: Boolean(config.wasender.apiKey)
+    wasenderApiConnected: Boolean(config.wasender.apiKey),
+    activeTenants: tenantRegistry.getAllTenants().length
   });
 });
 

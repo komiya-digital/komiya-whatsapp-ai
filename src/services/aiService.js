@@ -2,9 +2,9 @@ import { GoogleGenAI } from '@google/genai';
 import { config } from '../config.js';
 
 /**
- * Normalizes message text for robust intent recognition
+ * Normalizes message text for robust accent-insensitive matching
  */
-function normalizeText(text = '') {
+export function normalizeText(text = '') {
   return (text || '')
     .toLowerCase()
     .normalize('NFD')
@@ -13,9 +13,9 @@ function normalizeText(text = '') {
 }
 
 /**
- * Finds matching product from the catalog based on message text or context
+ * Finds matching product from the catalog based on message text or contextual reference
  */
-export function findMatchingProduct(text, products = [], lastMentionedProduct = null, companyName = '') {
+export function findMatchingProduct(text = '', products = [], lastMentionedProduct = null, companyName = '') {
   if (!Array.isArray(products) || products.length === 0) return null;
   const norm = normalizeText(text);
   const companyWords = normalizeText(companyName).split(/\s+/).filter(w => w.length >= 3);
@@ -29,8 +29,13 @@ export function findMatchingProduct(text, products = [], lastMentionedProduct = 
     }
   }
 
-  // 2. Significant product words (excluding company words and common stop words)
-  const stopWords = new Set(['pour', 'avec', 'dans', 'chez', 'plat', 'mode', 'vente', 'pack', 'vos', 'nos', 'des', 'les', 'une', 'votre', 'notre', 'produit', 'produits', 'service', 'services', 'articles']);
+  // 2. Significant product keywords (excluding company words and common stop words)
+  const stopWords = new Set([
+    'pour', 'avec', 'dans', 'chez', 'plat', 'mode', 'vente', 'pack', 'vos', 'nos', 
+    'des', 'les', 'une', 'votre', 'notre', 'produit', 'produits', 'service', 'services', 
+    'articles', 'bien', 'biens', 'formule', 'formules', 'offre', 'offres', 'menu', 'menus'
+  ]);
+
   for (const p of products) {
     if (!p?.name) continue;
     const pNorm = normalizeText(p.name);
@@ -40,7 +45,7 @@ export function findMatchingProduct(text, products = [], lastMentionedProduct = 
     }
   }
 
-  // 3. Ordinal reference (ex: "le premier", "le 2eme", "le second", "le dernier")
+  // 3. Ordinal references (ex: "le premier", "le 2eme", "le second", "le dernier")
   if (norm.match(/\b(premier|1er|premiere)\b/)) {
     return products[0] || null;
   }
@@ -54,8 +59,8 @@ export function findMatchingProduct(text, products = [], lastMentionedProduct = 
     return products[products.length - 1] || null;
   }
 
-  // 4. Demonstrative reference ("celui-la", "celle-la", "celui ci", "celui")
-  if (norm.match(/\b(celui[- ]?la|celle[- ]?la|celui[- ]?ci|celle[- ]?ci|celui|celle)\b/)) {
+  // 4. Demonstrative reference ("celui-la", "celle-la", "celui ci", "celui", "cette offre")
+  if (norm.match(/\b(celui[- ]?la|celle[- ]?la|celui[- ]?ci|celle[- ]?ci|celui|celle|ce produit|cet article|cette offre|ce plat|ce bien)\b/)) {
     return lastMentionedProduct || products[0] || null;
   }
 
@@ -70,7 +75,7 @@ export function extractLastMentionedProduct(history = [], products = [], company
     return null;
   }
 
-  // Search from most recent message backwards
+  // Search backwards from most recent message
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i];
     const text = typeof msg === 'string' 
@@ -84,10 +89,17 @@ export function extractLastMentionedProduct(history = [], products = [], company
 }
 
 /**
- * Advanced Intent Classification & Qualification Engine
- * Detects 20+ commercial intents adapted across any industry
+ * Advanced Multi-Sector Intent Classification & Qualification Engine
+ * Covers 20+ commercial intents adapted across any industry
  */
-export function analyzeIntentAndScore(message = '', currentScore = 0, history = [], products = [], lastProduct = null, companyName = '') {
+export function analyzeIntentAndScore(
+  message = '', 
+  currentScore = 0, 
+  history = [], 
+  products = [], 
+  lastProduct = null, 
+  companyName = ''
+) {
   const rawText = message || '';
   const norm = normalizeText(rawText);
 
@@ -98,14 +110,18 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
   let detectedNeed = null;
   let detectedBudget = null;
 
-  // Resolve product reference
+  // Resolve matching product
   const directlyMentionedProduct = findMatchingProduct(rawText, products, null, companyName);
-  const matchedProduct = directlyMentionedProduct || (norm.match(/\b(celui|celle|prix|combien|acheter|commander|reserver|ce produit|cet article)\b/) ? lastProduct : null);
+  const matchedProduct = directlyMentionedProduct || (
+    norm.match(/\b(celui|celle|prix|combien|acheter|commander|reserver|ce produit|cet article|ce menu|cette villa|cette maison|cette formation)\b/) 
+      ? lastProduct 
+      : null
+  );
 
   // 1. Human Handover Request
   if (
-    norm.match(/\b(humain|conseiller|agent|parler a quelqu['’]un|responsable|service client|personne reelle|vrai personne|numero direct)\b/) ||
-    (norm.includes('parler') && (norm.includes('humain') || norm.includes('responsable') || norm.includes('directeur')))
+    norm.match(/\b(humain|conseiller|agent|parler a quelqu['’]un|responsable|service client|personne reelle|vrai personne|numero direct|parler avec un agent)\b/) ||
+    (norm.includes('parler') && (norm.includes('humain') || norm.includes('responsable') || norm.includes('directeur') || norm.includes('conseiller')))
   ) {
     intent = 'human_handover';
     isHumanRequested = true;
@@ -114,38 +130,54 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
 
   // 2. Complaint or Refund
   else if (
-    norm.match(/\b(reclamation|rembourse|remboursement|plainte|probleme|casse|defectueux|arnaque|erreur de commande|insatisfait)\b/)
+    norm.match(/\b(reclamation|rembourse|remboursement|plainte|probleme|casse|defectueux|arnaque|erreur de commande|insatisfait|pas recu)\b/)
   ) {
     intent = 'complaint_refund';
     suggestedStatus = 'À relancer';
   }
 
-  // 3. Order / Booking / Purchase Intent (Strong conversion signal)
+  // 3. Purchase Intent & Orders
   else if (
-    norm.match(/\b(je veux acheter|j['’]achete|je prends|je commande|commander|passer commande|je reserve|reserver|reservation|reserver une table|prendre rendez[- ]?vous|reserver une visite|prendre rdv|comment commander|comment payer|proceder au paiement|m['’]inscrire|je valide)\b/) ||
-    (norm.match(/\b(acheter|prendre|payer|reserver)\b/) && (matchedProduct || norm.match(/\b(produit|service|table|bien|pack|formation)\b/)))
+    norm.match(/\b(je veux acheter|j['’]achete|je prends|je commande|commander|passer commande|je valide|comment commander|comment payer|proceder au paiement|m['’]inscrire|je le veux|je la veux|livrez[- ]?moi|amenez[- ]?moi|j['’]en veux)\b/) ||
+    (norm.match(/\b(acheter|prendre|payer|commander)\b/) && (matchedProduct || norm.match(/\b(produit|article|pack|robe|chemise|menu|burger)\b/)))
   ) {
-    if (norm.includes('reserv') || norm.includes('rendez-vous') || norm.includes('rdv') || norm.includes('visite')) {
-      intent = 'booking_intent';
-      suggestedStatus = 'Réservation demandée';
-    } else {
-      intent = 'purchase_intent';
-      suggestedStatus = 'Intention d\'achat';
-    }
+    intent = 'purchase_intent';
+    suggestedStatus = 'Intention d\'achat';
     scoreDelta += 35;
     if (matchedProduct) detectedNeed = matchedProduct.name;
   }
 
-  // 4. Quote Request
+  // 4. Booking / Appointment Intent (Restaurants, Real Estate, Salons, Clinics)
   else if (
-    norm.match(/\b(devis|estimation|facture proforma|proposition tarifaire|offre de prix|chiffrage)\b/)
+    norm.match(/\b(je reserve|reserver|reservation|reserver une table|prendre rendez[- ]?vous|reserver une visite|prendre rdv|visiter|visite|dispo pour une visite|creneau)\b/)
+  ) {
+    intent = 'booking_intent';
+    suggestedStatus = 'Réservation demandée';
+    scoreDelta += 30;
+    if (matchedProduct) detectedNeed = matchedProduct.name;
+  }
+
+  // 5. Quote Request
+  else if (
+    norm.match(/\b(devis|facture proforma|proposition tarifaire|offre de prix|chiffrage|estimation du cout)\b/)
   ) {
     intent = 'quote_request';
     suggestedStatus = 'Demande de devis';
     scoreDelta += 25;
+    if (matchedProduct) detectedNeed = matchedProduct.name;
   }
 
-  // 5. Price / Tariff Inquiry
+  // 6. Demo / Trial Request
+  else if (
+    norm.match(/\b(demonstration|demo|tester|essai|essayer|visite guidee|echantillon)\b/)
+  ) {
+    intent = 'demo_request';
+    suggestedStatus = 'Intéressé';
+    scoreDelta += 25;
+    if (matchedProduct) detectedNeed = matchedProduct.name;
+  }
+
+  // 7. Price / Tariff Inquiry
   else if (
     norm.match(/\b(prix|combien|tarif|tarifs|cout|coutent|coute|valeur|montant|c['’]est combien|quel est le prix|quel est le tarif|fcfa|f cfa|euros?|dollars?)\b/)
   ) {
@@ -155,7 +187,17 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
     if (matchedProduct) detectedNeed = matchedProduct.name;
   }
 
-  // 6. Delivery, Location & Opening Hours Inquiry
+  // 8. Availability Inquiry
+  else if (
+    norm.match(/\b(disponible|dispo|en stock|reste[- ]?t[- ]?il|encore disponible|disponibilite|rupture|a la carte ce jour)\b/)
+  ) {
+    intent = 'availability_inquiry';
+    suggestedStatus = 'Intéressé';
+    scoreDelta += 20;
+    if (matchedProduct) detectedNeed = matchedProduct.name;
+  }
+
+  // 9. Delivery & Shipping Inquiry
   else if (
     norm.match(/\b(livraison|livrez[- ]?vous|livrer|frais de livraison|expedition|delai de livraison|ou etes[- ]?vous|adresse|localisation|situe|boutique physique|horaires?|ouverture|fermeture|jours d['’]ouverture)\b/)
   ) {
@@ -164,7 +206,7 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
     scoreDelta += 15;
   }
 
-  // 7. Payment Methods Inquiry
+  // 10. Payment Methods Inquiry
   else if (
     norm.match(/\b(moyen de paiement|mode de paiement|paiement|payer par|wave|orange money|mtn|moov|carte bancaire|espece|a la livraison|virement)\b/)
   ) {
@@ -173,7 +215,7 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
     scoreDelta += 20;
   }
 
-  // 8. Objections Handling: Price / Budget
+  // 11. Price & Budget Objections
   else if (
     norm.match(/\b(cher|trop cher|hors de prix|reduire le prix|reduction|remise|rabais|geste commercial|negocier|promo|promotion|moins cher|trop eleve|au dessus de mon budget)\b/)
   ) {
@@ -182,7 +224,7 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
     scoreDelta += 10;
   }
 
-  // 9. Objections Handling: Trust, Quality & Guarantee
+  // 12. Trust & Quality Objections
   else if (
     norm.match(/\b(garantie|qualite|fiable|confiance|vrai|original|authentique|est[- ]?ce sur|peur de me faire arnaquer|preuve|temoignage|avis)\b/)
   ) {
@@ -191,17 +233,7 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
     scoreDelta += 15;
   }
 
-  // 10. Availability Inquiry
-  else if (
-    norm.match(/\b(disponible|dispo|en stock|reste[- ]?t[- ]?il|encore disponible|disponibilite|rupture)\b/)
-  ) {
-    intent = 'availability_inquiry';
-    suggestedStatus = 'Intéressé';
-    scoreDelta += 20;
-    if (matchedProduct) detectedNeed = matchedProduct.name;
-  }
-
-  // 11. Catalog / Products Discovery
+  // 13. Catalog & Products Discovery
   else if (
     norm.match(/\b(produits?|services?|articles?|catalogue|menu|carte|que proposez[- ]?vous|vos offres|vos prestations|qu['’]est[- ]?ce que vous vendez|vos modeles|montrez[- ]?moi|la liste)\b/) &&
     !directlyMentionedProduct
@@ -211,7 +243,7 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
     scoreDelta += 15;
   }
 
-  // 12. Specific Product Inquiry or Comparison
+  // 14. Specific Product Inquiry or Comparison
   else if (matchedProduct) {
     if (norm.match(/\b(difference|comparer|lequel choisir|lequel est mieux|comparaison)\b/)) {
       intent = 'product_comparison';
@@ -223,7 +255,7 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
     detectedNeed = matchedProduct.name;
   }
 
-  // 13. Company Presentation / About
+  // 15. About the Business
   else if (
     norm.match(/\b(qui etes[- ]?vous|presentez[- ]?vous|votre entreprise|parlez[- ]?moi de vous|c['’]est quoi votre societe)\b/)
   ) {
@@ -232,9 +264,9 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
     scoreDelta += 10;
   }
 
-  // 14. Contextual Short Follow-up (e.g. "Oui", "D'accord", "Celui-là", "Je veux bien")
+  // 16. Contextual Short Responses (e.g. "Oui", "Celui-là", "D'accord", "Non")
   else if (
-    norm.match(/^(oui|ouais|d['’]accord|ok|yes|exactement|parfait|super|tres bien|absolument|je veux bien|ca me va|celui[- ]?la|le deuxieme|le premier|interessant)$/) ||
+    norm.match(/^(oui|ouais|d['’]accord|ok|yes|exactement|parfait|super|tres bien|absolument|je veux bien|ca me va|celui[- ]?la|celle[- ]?la|le deuxieme|le premier|interessant)$/) ||
     norm.match(/^(non|pas maintenant|plus tard|pas vraiment|bof)$/)
   ) {
     if (norm.match(/^(non|pas maintenant|plus tard)$/)) {
@@ -244,29 +276,30 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
       intent = 'short_contextual';
       scoreDelta += 15;
       suggestedStatus = matchedProduct ? 'Intention d\'achat' : 'En conversation';
+      if (matchedProduct) detectedNeed = matchedProduct.name;
     }
   }
 
-  // 15. Greetings
+  // 17. Greetings
   else if (
     norm.match(/\b(bonjour|salut|bonsoir|hello|hi|coucou|bon matin|salam|bien le bonjour|hey)\b/)
   ) {
     intent = 'greeting';
     scoreDelta += 5;
-    suggestedStatus = history.length > 0 ? 'En conversation' : 'Nouveau';
+    suggestedStatus = (Array.isArray(history) && history.length > 0) ? 'En conversation' : 'Nouveau';
   }
 
-  // 16. Default Qualification Inquiry
+  // 18. Default Qualification
   else {
     intent = 'qualification';
     scoreDelta += 10;
     suggestedStatus = 'En conversation';
   }
 
-  // Budget detection (e.g., "mon budget est de 50000", "50 000 fcfa", "budget 20000")
+  // Budget detection (e.g. "50000 fcfa", "20 000 FCFA", "150 €", "$500")
   const budgetMatch = rawText.match(/(\d+[\s\d]*)\s*(fcfa|f cfa|cfa|frs|euros?|€|\$)/i);
   if (budgetMatch) {
-    detectedBudget = budgetMatch[0];
+    detectedBudget = budgetMatch[0].trim();
     scoreDelta += 15;
   }
 
@@ -290,8 +323,8 @@ export function analyzeIntentAndScore(message = '', currentScore = 0, history = 
 }
 
 /**
- * Builds a comprehensive, professional system prompt strictly adhering to
- * multi-tenant isolation, WhatsApp brevity and business goals.
+ * Builds a strict, high-converting system prompt for the AI model
+ * rigorously enforcing multi-tenant isolation, WhatsApp brevity, and company goals.
  */
 export function buildSystemPrompt({
   agentConfig = {},
@@ -315,7 +348,7 @@ export function buildSystemPrompt({
     ? products.map((p, idx) => {
         const priceStr = `${Number(p.price || 0).toLocaleString('fr-FR')} ${p.currency || currency}`;
         const argsStr = Array.isArray(p.sales_arguments) && p.sales_arguments.length > 0
-          ? `\n    - Arguments de vente : ${p.sales_arguments.join('; ')}`
+          ? `\n    - Arguments clés : ${p.sales_arguments.join('; ')}`
           : '';
         const descStr = p.description ? `\n    - Description : ${p.description}` : '';
         const catStr = p.category ? ` (Catégorie: ${p.category})` : '';
@@ -335,7 +368,7 @@ export function buildSystemPrompt({
     : 'Aucun produit spécifique abordé pour l\'instant.';
 
   const contactSummary = contact
-    ? `Nom du prospect : ${contact.name || 'Inconnu'}\nStatut CRM : ${contact.status || 'En conversation'}\nScore : ${contact.score || 0}/100`
+    ? `Nom du prospect : ${contact.name || 'Inconnu'}\nStatut CRM : ${contact.status || 'En conversation'}\nScore actuel : ${contact.score || 0}/100`
     : '';
 
   return `Tu es ${agentName}, le commercial IA officiel et exclusif de l'entreprise "${companyName}", située en ${country}.
@@ -405,12 +438,12 @@ export function generateDeterministicCommercialReply({
       return `C'est bien noté ! Je mets la conversation en pause et je transmets votre demande directement à un conseiller de ${companyName}. Un membre de notre équipe va prendre le relais sous peu.`;
 
     case 'complaint_refund':
-      return `Je comprends parfaitement votre préoccupation et je suis désolé pour ce désagrément. Je préviens immédiatement notre responsable qualité pour traiter votre dossier en priorité. Pouvez-vous me préciser les détails ?`;
+      return `Je comprends parfaitement votre préoccupation et je suis désolé pour ce désagrément. Je préviens immédiatement notre responsable chez ${companyName} pour traiter votre dossier en priorité. Pouvez-vous me préciser votre référence ou situation ?`;
 
     case 'greeting': {
       // If history already has messages, do not repeat welcoming pitch
       if (Array.isArray(history) && history.length > 1) {
-        return `Bonjour à nouveau ! Comment puis-je vous accompagner sur nos offres ${companyName} aujourd'hui ?`;
+        return `Bonjour à nouveau ! Comment puis-je vous accompagner sur nos offres chez ${companyName} aujourd'hui ?`;
       }
       if (products.length > 0) {
         return `Bonjour et bienvenue chez ${companyName} ! Je suis ${agentName}, votre conseiller commercial. Êtes-vous à la recherche d'un produit en particulier ou souhaitez-vous découvrir nos meilleures offres ?`;
@@ -420,11 +453,11 @@ export function generateDeterministicCommercialReply({
 
     case 'catalog_discovery': {
       if (products.length === 0) {
-        return `Bienvenue chez ${companyName} ! Notre catalogue est en cours d'actualisation. Quel type de produit ou service recherchez-vous en particulier ?`;
+        return `Bienvenue chez ${companyName} ! Notre catalogue est en cours d'actualisation. Quel type d'article ou prestation recherchez-vous en particulier ?`;
       }
       const topProducts = products.slice(0, 3).map(p => `• *${p.name}* : ${formatPrice(p)}`).join('\n');
       const moreText = products.length > 3 ? `\n... et d'autres options encore disponibles !` : '';
-      return `Voici les produits actuellement phares chez *${companyName}* :\n\n${topProducts}${moreText}\n\nLequel de ces articles attire votre attention ?`;
+      return `Voici les offres actuellement disponibles chez *${companyName}* :\n\n${topProducts}${moreText}\n\nLequel de ces articles attire votre attention ?`;
     }
 
     case 'price_inquiry': {
@@ -436,9 +469,9 @@ export function generateDeterministicCommercialReply({
       }
       if (products.length > 0) {
         const priceList = products.slice(0, 2).map(p => `• ${p.name} : *${formatPrice(p)}*`).join('\n');
-        return `Nos tarifs dépendent de l'article choisi. Par exemple :\n${priceList}\n\nQuel article vous intéresse précisément ?`;
+        return `Nos tarifs dépendent de l'article choisi chez ${companyName}. Par exemple :\n${priceList}\n\nQuel article vous intéresse précisément ?`;
       }
-      return `Nos prix sont très compétitifs chez ${companyName}. De quel produit ou prestation souhaitez-vous connaître le tarif ?`;
+      return `Nos prix sont très compétitifs chez ${companyName}. De quel article ou service souhaitez-vous connaître le tarif ?`;
     }
 
     case 'purchase_intent': {
@@ -459,21 +492,28 @@ export function generateDeterministicCommercialReply({
       if (targetProduct) {
         return `Nous pouvons établir votre devis pour *${targetProduct.name}* (${formatPrice(targetProduct)}). Avez-vous des quantités ou des options spécifiques à prévoir ?`;
       }
-      return `C'est noté pour votre demande de devis chez ${companyName}. Quels sont les éléments ou quantités souhaités pour vous envoyer une proposition précise ?`;
+      return `C'est bien noté pour votre demande de devis chez ${companyName}. Quels sont les éléments ou quantités souhaités pour vous envoyer une proposition précise ?`;
+    }
+
+    case 'demo_request': {
+      if (targetProduct) {
+        return `Nous serions ravis de vous faire découvrir *${targetProduct.name}* en action ! Quel jour de la semaine seriez-vous disponible pour une démonstration ?`;
+      }
+      return `Avec plaisir pour vous présenter nos prestations en démonstration ! Quand seriez-vous disponible pour échanger ?`;
     }
 
     case 'availability_inquiry': {
       if (targetProduct) {
         if (targetProduct.is_available === false) {
-          return `*${targetProduct.name}* est temporairement en rupture de stock. Souhaitez-vous que je vous propose une alternative disponible équivalente ?`;
+          return `*${targetProduct.name}* est temporairement en rupture de stock. Souhaitez-vous que je vous propose une alternative disponible équivalente chez ${companyName} ?`;
         }
-        return `Oui, *${targetProduct.name}* est bien disponible en stock au tarif de ${formatPrice(targetProduct)} ! Souhaitez-vous le réserver ou vous faire livrer ?`;
+        return `Oui, *${targetProduct.name}* est bien disponible au tarif de ${formatPrice(targetProduct)} ! Souhaitez-vous le réserver ou vous faire livrer ?`;
       }
       return `La majorité de nos produits sont immédiatement disponibles chez ${companyName}. Quel article en particulier souhaitez-vous réserver ?`;
     }
 
     case 'delivery_inquiry': {
-      return `Nous assurons des livraisons rapides et soignées pour l'ensemble de nos clients. Dans quelle ville ou quartier souhaitez-vous recevoir votre commande ?`;
+      return `Nous assurons des livraisons rapides et soignées pour l'ensemble de nos clients chez ${companyName}. Dans quelle ville ou quartier souhaitez-vous recevoir votre commande ?`;
     }
 
     case 'payment_inquiry': {
@@ -484,10 +524,10 @@ export function generateDeterministicCommercialReply({
       if (targetProduct) {
         const qualityArg = (Array.isArray(targetProduct.sales_arguments) && targetProduct.sales_arguments.length > 0)
           ? targetProduct.sales_arguments[0]
-          : "sa qualité premium et sa garantie certifiée";
-        return `Je comprends tout à fait votre souci de budget. Le tarif de ${formatPrice(targetProduct)} s'explique par ${qualityArg}, ce qui en fait un investissement très durable. Souhaitez-vous voir une formule adaptée ?`;
+          : "sa qualité supérieure et sa durabilité éprouvée";
+        return `Je comprends tout à fait votre souci de budget. Le tarif de ${formatPrice(targetProduct)} s'explique par ${qualityArg}, ce qui en fait un investissement très rentable. Souhaitez-vous voir une formule adaptée ?`;
       }
-      return `Nous veillons à offrir le meilleur rapport qualité/prix du marché chez ${companyName}. Avez-vous une enveloppe budgétaire précise pour que je vous oriente vers la meilleure solution ?`;
+      return `Nous veillons à offrir le meilleur rapport qualité/prix du marché chez ${companyName}. Avez-vous une enveloppe budgétaire précise pour que je vous oriente vers la solution idéale ?`;
     }
 
     case 'objection_trust': {
@@ -613,13 +653,14 @@ export async function processAIService({
     return {
       replyText: handoverText,
       analysis,
-      handoverRequired: true
+      handoverRequired: true,
+      engine: 'handover'
     };
   }
 
   // 4. Check if Gemini API is available and configured
   const apiKey = config.gemini.apiKey;
-  const isKeyConfigured = Boolean(apiKey && apiKey.trim().length > 10 && !apiKey.includes('your_gemini_api_key'));
+  const isKeyConfigured = Boolean(apiKey && apiKey.trim().length > 15 && !apiKey.includes('your_gemini_api_key'));
 
   if (!isKeyConfigured) {
     // Generate high-quality deterministic response using real company catalog & context
@@ -659,9 +700,9 @@ export async function processAIService({
       { role: 'user', parts: [{ text: incomingMessage }] }
     ];
 
-    // Try gemini-3.8-flash, gemini-2.0-flash, gemini-1.5-flash
+    // Use official Gemini Developer API models
     let replyText = '';
-    const modelsToTry = ['gemini-3.8-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     let lastError = null;
 
     for (const modelName of modelsToTry) {

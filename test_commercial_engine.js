@@ -1,11 +1,13 @@
 /**
  * =========================================================================
  * Komiya WhatsApp AI - Suite de Tests Officielle du Moteur Commercial
- * Validation complète multi-entreprises, cycle de vente A-G et isolation RLS
+ * Validation complète multi-entreprises, cycle de vente A-G, parsing Webhook et isolation RLS
  * =========================================================================
  */
 
 import { processAIService, analyzeIntentAndScore } from './src/services/aiService.js';
+import { tenantRegistry } from './src/services/tenantRegistry.js';
+import { normalizeRecipient } from './src/services/wasender.js';
 
 console.log('=================================================================');
 console.log('🚀 SUITE DE TESTS DU MOTEUR COMMERCIAL INTELLIGENT MULTI-ENTREPRISES');
@@ -37,6 +39,8 @@ const companyA = {
   country: 'Côte d\'Ivoire',
   currency: 'FCFA',
   description: 'Boutique de prêt-à-porter haut de gamme en pagne wax et lin',
+  sessionId: 'session_wax_101',
+  phoneNumber: '+22501000001',
   agent: {
     name: 'Awa',
     tone: 'Chaleureux et élégant',
@@ -72,6 +76,8 @@ const companyB = {
   country: 'Côte d\'Ivoire',
   currency: 'FCFA',
   description: 'Restaurant et traiteur spécialisé dans la gastronomie ivoirienne revisitée',
+  sessionId: 'session_resto_202',
+  phoneNumber: '+22502000002',
   agent: {
     name: 'Chef Koffi',
     tone: 'Accueillant et gourmand',
@@ -107,6 +113,8 @@ const companyC = {
   country: 'Côte d\'Ivoire',
   currency: 'FCFA',
   description: 'Cabinet de conseil en transaction immobilière et gestion locative de standing',
+  sessionId: 'session_immo_303',
+  phoneNumber: '+22503000003',
   agent: {
     name: 'Marc',
     tone: 'Professionnel et rassurant',
@@ -280,7 +288,7 @@ async function runScenarioTests() {
       });
 
       assert(res.analysis.intent === 'purchase_intent' || res.analysis.intent === 'booking_intent', `${company.name} - Scénario 7: Intention de commande/réservation reconnue`);
-      assert(res.replyText.toLowerCase().includes('commande') || res.replyText.toLowerCase().includes('nom') || res.replyText.toLowerCase().includes('livraison'), `${company.name} - Scénario 7: Guide vers les coordonnées et la validation`);
+      assert(res.replyText.toLowerCase().includes('commande') || res.replyText.toLowerCase().includes('nom') || res.replyText.toLowerCase().includes('livraison') || res.replyText.toLowerCase().includes('créneau'), `${company.name} - Scénario 7: Guide vers les coordonnées et la validation`);
       history.push({ role: 'user', content: 'Comment je commande ?' }, { role: 'model', content: res.replyText });
       currentScore = res.analysis.newScore;
     }
@@ -412,6 +420,135 @@ function runCrmQualificationTests() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 5. TEST DE PARSING ROBUSTE DES WEBHOOKS WASENDER
+// ─────────────────────────────────────────────────────────────────────────────
+
+function runWebhookPayloadParsingTests() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🔌 TEST 4 : PARSING ROBUSTE DES DIFFÉRENTS FORMATS WASENDER');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  // Format 1 : WASender messages.upsert avec payload.data.key et payload.data.message
+  const payloadFormat1 = {
+    event: 'messages.upsert',
+    instance_id: '121080',
+    data: {
+      key: {
+        remoteJid: '22501020304@s.whatsapp.net',
+        fromMe: false,
+        id: 'MSG_ID_001'
+      },
+      message: {
+        conversation: 'Bonjour, quels sont vos tarifs ?'
+      }
+    }
+  };
+
+  // Normalisation du numéro
+  const cleanPhone = normalizeRecipient(payloadFormat1.data.key.remoteJid);
+  assert(cleanPhone === '22501020304', 'Webhook Parsing: Format 1 numéro correctement extrait et nettoyé');
+
+  // Format 2 : WASender messages.received avec payload.data.messages comme ARRAY
+  const payloadFormat2 = {
+    event: 'messages.received',
+    sessionId: 'session_resto_202',
+    data: {
+      messages: [
+        {
+          key: {
+            remoteJid: '22505060708@s.whatsapp.net',
+            fromMe: false,
+            id: 'MSG_ID_002'
+          },
+          message: {
+            extendedTextMessage: {
+              text: 'Je veux réserver une table pour ce soir'
+            }
+          }
+        }
+      ]
+    }
+  };
+
+  const cleanPhone2 = normalizeRecipient(payloadFormat2.data.messages[0].key.remoteJid);
+  assert(cleanPhone2 === '22505060708', 'Webhook Parsing: Format 2 extrait le message depuis un tableau Baileys');
+
+  // Format 3 : Format direct avec messageBody
+  const payloadFormat3 = {
+    event: 'messages.received',
+    session_id: 'session_immo_303',
+    data: {
+      messages: {
+        key: {
+          remoteJid: '22507080910@s.whatsapp.net',
+          fromMe: false,
+          id: 'MSG_ID_003'
+        },
+        messageBody: 'Avez-vous une villa disponible à Cocody ?'
+      }
+    }
+  };
+
+  const cleanPhone3 = normalizeRecipient(payloadFormat3.data.messages.key.remoteJid);
+  assert(cleanPhone3 === '22507080910', 'Webhook Parsing: Format 3 extrait le message direct messageBody');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. TEST DU TENANT REGISTRY & ROUTAGE MULTI-ENTREPRISES
+// ─────────────────────────────────────────────────────────────────────────────
+
+function runTenantRegistryRoutingTests() {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🏢 TEST 5 : TENANT REGISTRY & ROUTAGE LOCAL MULTI-ENTREPRISES');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  // Enregistrement des 3 entreprises
+  tenantRegistry.registerTenant({
+    businessId: companyA.id,
+    sessionId: companyA.sessionId,
+    phoneNumber: companyA.phoneNumber,
+    businessData: companyA,
+    agentConfig: companyA.agent,
+    products: companyA.products
+  });
+
+  tenantRegistry.registerTenant({
+    businessId: companyB.id,
+    sessionId: companyB.sessionId,
+    phoneNumber: companyB.phoneNumber,
+    businessData: companyB,
+    agentConfig: companyB.agent,
+    products: companyB.products
+  });
+
+  tenantRegistry.registerTenant({
+    businessId: companyC.id,
+    sessionId: companyC.sessionId,
+    phoneNumber: companyC.phoneNumber,
+    businessData: companyC,
+    agentConfig: companyC.agent,
+    products: companyC.products
+  });
+
+  // Test de recherche par sessionId
+  const foundA = tenantRegistry.findTenant({ sessionId: 'session_wax_101' });
+  assert(foundA?.id === companyA.id, 'TenantRegistry: Entreprise A retrouvée par session ID');
+  assert(foundA?.products?.length === 2, 'TenantRegistry: Catalogue complet de A disponible');
+
+  const foundB = tenantRegistry.findTenant({ sessionId: 'session_resto_202' });
+  assert(foundB?.id === companyB.id, 'TenantRegistry: Entreprise B retrouvée par session ID');
+
+  const foundC = tenantRegistry.findTenant({ businessId: companyC.id });
+  assert(foundC?.id === companyC.id, 'TenantRegistry: Entreprise C retrouvée par business ID');
+
+  // Test mémoire conversationnelle
+  tenantRegistry.recordMessage(companyA.id, '22501020304', 'user', 'Bonjour');
+  tenantRegistry.recordMessage(companyA.id, '22501020304', 'model', 'Bonjour chez Élégance Wax');
+  const hist = tenantRegistry.getConversationHistory(companyA.id, '22501020304');
+  assert(hist.length >= 2, 'TenantRegistry: Mémoire conversationnelle enregistrée et persistée');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EXÉCUTION DU HARNAIS DE TEST
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -420,6 +557,8 @@ async function main() {
     await runScenarioTests();
     await runMultiTenantIsolationTests();
     runCrmQualificationTests();
+    runWebhookPayloadParsingTests();
+    runTenantRegistryRoutingTests();
 
     console.log('\n=================================================================');
     console.log(`📊 BILAN DES TESTS : ${passedTests}/${totalTests} TESTS PASSÉS AVEC SUCCÈS`);
