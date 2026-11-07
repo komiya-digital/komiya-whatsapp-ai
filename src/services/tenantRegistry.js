@@ -57,6 +57,49 @@ class TenantRegistry {
   }
 
   /**
+   * Preloads all active businesses and their catalogs from Supabase on startup
+   */
+  async initFromSupabase(supabaseServer) {
+    if (!supabaseServer) return;
+    try {
+      console.log('[TenantRegistry] Preloading tenants from Supabase...');
+      const { data: businesses, error: bErr } = await supabaseServer
+        .from('businesses')
+        .select('*');
+
+      if (bErr || !Array.isArray(businesses) || businesses.length === 0) {
+        console.log('[TenantRegistry] No businesses returned from Supabase on boot:', bErr?.message || '0 found');
+        return;
+      }
+
+      for (const biz of businesses) {
+        const [connRes, agentRes, prodRes] = await Promise.all([
+          supabaseServer.from('whatsapp_connections').select('*').eq('business_id', biz.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+          supabaseServer.from('ai_agents').select('*').eq('business_id', biz.id).maybeSingle(),
+          supabaseServer.from('products').select('*').eq('business_id', biz.id).eq('is_available', true)
+        ]);
+
+        const conn = connRes?.data || null;
+        const agent = agentRes?.data || null;
+        const products = prodRes?.data || [];
+
+        this.registerTenant({
+          businessId: biz.id,
+          sessionId: conn?.session_id || null,
+          phoneNumber: conn?.phone_number || null,
+          apiKey: conn?.api_key || null,
+          businessData: biz,
+          agentConfig: agent || {},
+          products: products
+        });
+      }
+      console.log(`[TenantRegistry] Successfully preloaded ${this.tenants.size} tenant(s) from Supabase.`);
+    } catch (err) {
+      console.warn('[TenantRegistry] Preload note:', err.message);
+    }
+  }
+
+  /**
    * Register or update a tenant's complete commercial context
    */
   registerTenant({
@@ -105,19 +148,23 @@ class TenantRegistry {
   }
 
   /**
-   * Find tenant by session ID, phone number or business ID
+   * Find tenant by candidate sessions, phone number or business ID
    */
-  findTenant({ sessionId = null, phoneNumber = null, businessId = null }) {
+  findTenant({ sessionId = null, candidateSessionIds = [], phoneNumber = null, businessId = null }) {
     // 1. Direct Business ID match
     if (businessId && this.tenants.has(businessId)) {
       return this.tenants.get(businessId);
     }
 
-    // 2. Session ID match
-    if (sessionId) {
-      const cleanSession = sessionId.toString().trim();
+    // 2. Candidate Session IDs match
+    const sessions = [
+      ...(Array.isArray(candidateSessionIds) ? candidateSessionIds : []),
+      sessionId
+    ].filter(Boolean).map(s => s.toString().trim().toLowerCase());
+
+    for (const s of sessions) {
       for (const t of this.tenants.values()) {
-        if (t.sessionId && t.sessionId.toString().trim() === cleanSession) {
+        if (t.sessionId && t.sessionId.toString().trim().toLowerCase() === s) {
           return t;
         }
       }

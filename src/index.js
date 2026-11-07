@@ -7,6 +7,7 @@ import webhookRouter from './routes/webhook.js';
 import { processAIService } from './services/aiService.js';
 import { sendTextMessage } from './services/wasender.js';
 import { tenantRegistry } from './services/tenantRegistry.js';
+import { supabaseServer, isServiceRole } from './services/supabaseBackend.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,7 +19,8 @@ const allowedOrigins = [
   config.appUrl,
   'http://localhost:3000',
   'http://localhost:5173',
-  'https://wasenderapi.com'
+  'https://wasenderapi.com',
+  'https://whatsapp.komiya.business'
 ];
 
 app.use(cors({
@@ -119,13 +121,32 @@ app.post('/api/wasender/send-message', async (req, res) => {
 });
 
 // Health check API endpoint
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'disconnected';
+  let waCount = 0;
+  if (supabaseServer) {
+    try {
+      const { data, error } = await supabaseServer.from('whatsapp_connections').select('id, session_id');
+      if (!error && data) {
+        dbStatus = 'connected';
+        waCount = data.length;
+      } else {
+        dbStatus = 'error: ' + (error?.message || 'unknown');
+      }
+    } catch (e) {
+      dbStatus = 'exception: ' + e.message;
+    }
+  }
+
   res.json({
     status: 'online',
     service: 'Komiya WhatsApp AI Production Platform',
     appUrl: config.appUrl,
     wasenderApiConnected: Boolean(config.wasender.apiKey),
-    activeTenants: tenantRegistry.getAllTenants().length
+    activeTenants: tenantRegistry.getAllTenants().length,
+    isServiceRole,
+    dbStatus,
+    waCount
   });
 });
 
@@ -134,10 +155,17 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-app.listen(config.port, () => {
+app.listen(config.port, async () => {
   console.log(`====================================================`);
   console.log(`🚀 Komiya WhatsApp AI Production Server Running!`);
   console.log(`🌐 Public App URL: ${config.appUrl}`);
   console.log(`📌 Public Webhook URL: ${config.appUrl}/api/webhooks/wasender`);
   console.log(`====================================================`);
+
+  // Preload tenants from database on boot
+  if (supabaseServer) {
+    await tenantRegistry.initFromSupabase(supabaseServer).catch(e => {
+      console.warn('Initial tenant preload note:', e.message);
+    });
+  }
 });

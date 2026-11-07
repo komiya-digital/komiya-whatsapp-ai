@@ -162,47 +162,47 @@ router.post('/wasender', async (req, res) => {
     console.log(`[WhatsApp Incoming] [${senderPhone}] (${senderName || 'Inconnu'}): "${messageText}"`);
 
     // 5. Extract Session & Business routing parameters
-    const incomingSessionId = (
-      req.query?.session || 
-      req.query?.sessionId || 
-      req.query?.session_id || 
-      req.headers['x-session-id'] || 
-      req.headers['x-wasender-session'] || 
-      payload.instance_id || 
-      payload.sessionId || 
-      payload.session_id || 
-      payload.session || 
-      payload.data?.instance_id || 
-      payload.data?.sessionId || 
-      payload.data?.session_id || 
-      payload.data?.session || 
-      config.wasender.sessionId || 
-      null
-    );
+    const candidateSessionIds = [
+      req.query?.session,
+      req.query?.sessionId,
+      req.query?.session_id,
+      req.headers['x-session-id'],
+      req.headers['x-wasender-session'],
+      payload.sessionId,
+      payload.session_id,
+      payload.session,
+      payload.instance_id,
+      payload.data?.sessionId,
+      payload.data?.session_id,
+      payload.data?.session,
+      payload.data?.instance_id,
+      config.wasender.sessionId
+    ].filter(Boolean);
 
     const queryBusinessId = req.query?.bid || req.query?.business_id || req.query?.businessId || null;
 
-    const receiverPhone = (
-      req.query?.phone || 
-      payload.device_id || 
-      payload.phone_number || 
-      payload.receiver || 
-      payload.data?.receiver || 
-      payload.data?.phone || 
-      payload.data?.to || 
-      payload.to || 
-      null
-    );
+    const candidatePhoneNumbers = [
+      req.query?.phone,
+      payload.device_id,
+      payload.phone_number,
+      payload.receiver,
+      payload.data?.receiver,
+      payload.data?.phone,
+      payload.data?.to,
+      payload.to
+    ].filter(Boolean);
 
     // 6. Identify Tenant Commercial Context
     const tenantContext = await getTenantCommercialContext({
-      sessionId: incomingSessionId,
-      phoneNumber: receiverPhone,
+      sessionId: candidateSessionIds[0] || null,
+      candidateSessionIds,
+      phoneNumber: candidatePhoneNumbers[0] || null,
+      candidatePhoneNumbers,
       businessId: queryBusinessId
     });
 
     if (!tenantContext || !tenantContext.id) {
-      console.warn(`[Webhook Warning] Could not link incoming message from ${senderPhone} to a registered business. (Session: ${incomingSessionId}, Receiver: ${receiverPhone}, Query: ${JSON.stringify(req.query)}). Aborting AI reply to protect multi-tenant isolation.`);
+      console.warn(`[Webhook Warning] Could not link incoming message from ${senderPhone} to a registered business. (Candidates: ${candidateSessionIds.join(', ')}, Receiver: ${candidatePhoneNumbers.join(', ')}, Query: ${JSON.stringify(req.query)}). Aborting AI reply to protect multi-tenant isolation.`);
       return;
     }
 
